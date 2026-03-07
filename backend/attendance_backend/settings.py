@@ -49,11 +49,10 @@ MIDDLEWARE = [
 ]
 
 # For college deployment: set CORS_ALLOWED_ORIGINS to your frontend URL(s), e.g. "https://attendance.college.edu"
-_CORS_ORIGINS = os.environ.get("CORS_ALLOWED_ORIGINS")
-if _CORS_ORIGINS:
-    CORS_ALLOWED_ORIGINS = [o.strip() for o in _CORS_ORIGINS.split(",")]
-else:
-    CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "https://attendance-system-2-77c2.onrender.com",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'attendance_backend.urls'
@@ -76,9 +75,14 @@ AUTH_USER_MODEL = 'core.User'
 
 # Session cookie: use same host for frontend and backend (e.g. both localhost or both 127.0.0.1)
 # so the admin portal can load students. Default Lax allows same-site requests (same host, any port).
-SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_AGE = 86400 * 7  # 7 days
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
+
+SESSION_COOKIE_AGE = 86400 * 7
 SESSION_SAVE_EVERY_REQUEST = True
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'core.auth.SessionAuthenticationNoCSRF',
