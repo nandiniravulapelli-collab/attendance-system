@@ -1441,30 +1441,30 @@ export const AdminLayout: React.FC = () => {
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
                     <Label>Full name</Label>
-                    <Input value={addStudentForm.full_name} onChange={e => setAddStudentForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Full name" />
+                    <Input value={addStudentForm.full_name ?? ''} onChange={e => setAddStudentForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Full name" />
                   </div>
                   <div className="grid gap-2">
                     <Label>Roll number *</Label>
-                    <Input value={addStudentForm.roll_number} onChange={e => setAddStudentForm(f => ({ ...f, roll_number: e.target.value }))} placeholder="e.g. CSE2021001" required />
+                    <Input value={addStudentForm.roll_number ?? ''} onChange={e => setAddStudentForm(f => ({ ...f, roll_number: e.target.value }))} placeholder="e.g. CSE2021001" required />
                   </div>
                   <div className="grid gap-2">
                     <Label>Email *</Label>
-                    <Input type="email" value={addStudentForm.email} onChange={e => setAddStudentForm(f => ({ ...f, email: e.target.value }))} placeholder="Email" required />
+                    <Input type="email" value={addStudentForm.email ?? ''} onChange={e => setAddStudentForm(f => ({ ...f, email: e.target.value }))} placeholder="Email" required />
                   </div>
                   <div className="grid gap-2">
                     <Label>Password *</Label>
-                    <Input type="password" value={addStudentForm.password} onChange={e => setAddStudentForm(f => ({ ...f, password: e.target.value }))} placeholder="Login password" required />
+                    <Input type="password" value={addStudentForm.password ?? ''} onChange={e => setAddStudentForm(f => ({ ...f, password: e.target.value }))} placeholder="Login password" required />
                   </div>
                   <div className="grid gap-2">
                     <Label>Phone</Label>
-                    <Input value={addStudentForm.phone} onChange={e => setAddStudentForm(f => ({ ...f, phone: e.target.value }))} placeholder="Phone" />
+                    <Input value={addStudentForm.phone ?? ''} onChange={e => setAddStudentForm(f => ({ ...f, phone: e.target.value }))} placeholder="Phone" />
                   </div>
                   <div className="grid gap-2">
                     <Label>Department</Label>
-                    <Select value={addStudentForm.department} onValueChange={v => setAddStudentForm(f => ({ ...f, department: v }))}>
+                    <Select value={addStudentForm.department || '__none__'} onValueChange={v => setAddStudentForm(f => ({ ...f, department: v === '__none__' ? '' : v }))}>
                       <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">—</SelectItem>
+                        <SelectItem value="__none__">—</SelectItem>
                         {(apiDepartments || []).map((d: { id: number; code: string; name: string }) => (
                           <SelectItem key={d.id} value={d.code}>{d.code} – {d.name}</SelectItem>
                         ))}
@@ -1473,10 +1473,10 @@ export const AdminLayout: React.FC = () => {
                   </div>
                   <div className="grid gap-2">
                     <Label>Section</Label>
-                    <Select value={addStudentForm.section} onValueChange={v => setAddStudentForm(f => ({ ...f, section: v }))}>
+                    <Select value={addStudentForm.section || '__none__'} onValueChange={v => setAddStudentForm(f => ({ ...f, section: v === '__none__' ? '' : v }))}>
                       <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">—</SelectItem>
+                        <SelectItem value="__none__">—</SelectItem>
                         {(apiSections || []).map((s: { id: number; name: string }) => (
                           <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
                         ))}
@@ -1485,7 +1485,7 @@ export const AdminLayout: React.FC = () => {
                   </div>
                   <div className="grid gap-2">
                     <Label>Year</Label>
-                    <Select value={addStudentForm.year} onValueChange={v => setAddStudentForm(f => ({ ...f, year: v }))}>
+                    <Select value={addStudentForm.year || '1'} onValueChange={v => setAddStudentForm(f => ({ ...f, year: v }))}>
                       <SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="1">Year 1</SelectItem>
