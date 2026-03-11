@@ -491,12 +491,17 @@ def bulk_student_upload_view(request):
         return Response({"detail": "Invalid file type. Please upload an .xlsx file."}, status=400)
 
     try:
+        if hasattr(upload, 'seek'):
+            upload.seek(0)
         wb = load_workbook(filename=upload, data_only=True)
     except Exception:
         return Response({"detail": "Could not read Excel file. Make sure it is a valid .xlsx file."}, status=400)
 
     ws = wb.active
-    rows = list(ws.iter_rows(values_only=True))
+    # Ensure full sheet is read: sheet dimensions are often wrong, so read at least 5000 rows
+    max_row = getattr(ws, 'max_row', None) or 0
+    read_max_row = max(max_row, 5000)
+    rows = list(ws.iter_rows(min_row=1, max_row=read_max_row, values_only=True))
     if not rows:
         return Response({"detail": "Excel file is empty."}, status=400)
 
