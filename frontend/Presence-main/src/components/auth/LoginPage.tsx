@@ -151,11 +151,13 @@ export const LoginPage: React.FC = () => {
       <div className="w-full max-w-md space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
-            <GraduationCap className="w-8 h-8 text-primary-foreground" />
-          </div>
-          <h1 className="text-3xl font-bold">SRITW</h1>
-          <p className="text-muted-foreground">Sign in to your account</p>
+          <img
+            src="/logo.png"
+            alt="Sumathi Reddy Institute of Technology for Women"
+            className="mx-auto w-full max-w-[320px] h-auto object-contain"
+            style={{ maxHeight: '120px' }}
+          />
+          <p className="text-muted-foreground text-sm mt-2">Sign in to your account</p>
         </div>
 
         <Card>
