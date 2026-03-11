@@ -101,6 +101,17 @@ export const AdminLayout: React.FC = () => {
   const [studentFilterDept, setStudentFilterDept] = useState<string>('__all__');
   const [studentFilterSection, setStudentFilterSection] = useState('');
   const [studentFilterYear, setStudentFilterYear] = useState('');
+  const [addStudentOpen, setAddStudentOpen] = useState(false);
+  const [addStudentForm, setAddStudentForm] = useState({
+    full_name: '',
+    roll_number: '',
+    email: '',
+    password: '',
+    department: '',
+    section: '',
+    year: '1',
+    phone: ''
+  });
 
   // Branches (Departments) from API
   const [apiDepartments, setApiDepartments] = useState<Array<{ id: number; name: string; code: string }>>([]);
@@ -193,7 +204,7 @@ export const AdminLayout: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'sections' && activeTab !== 'mark-attendance') return;
+    if (activeTab !== 'sections' && activeTab !== 'mark-attendance' && activeTab !== 'students') return;
     setSectionsLoading(true);
     fetch(apiUrl('/api/sections/'), { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
@@ -276,6 +287,48 @@ export const AdminLayout: React.FC = () => {
       }
     } catch {
       toast({ title: 'Update failed', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
+  const handleSaveAddStudent = async () => {
+    if (!addStudentForm.roll_number?.trim() || !addStudentForm.email?.trim()) {
+      toast({ title: 'Required', description: 'Roll number and email are required.', variant: 'destructive' });
+      return;
+    }
+    if (!addStudentForm.password?.trim()) {
+      toast({ title: 'Required', description: 'Password is required.', variant: 'destructive' });
+      return;
+    }
+    try {
+      const res = await fetch(apiUrl('/api/register/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          username: addStudentForm.roll_number.trim(),
+          role: 'student',
+          full_name: addStudentForm.full_name.trim() || addStudentForm.roll_number.trim(),
+          roll_number: addStudentForm.roll_number.trim(),
+          email: addStudentForm.email.trim(),
+          password: addStudentForm.password.trim(),
+          phone: addStudentForm.phone.trim() || '',
+          department: addStudentForm.department || '',
+          section: addStudentForm.section || '',
+          year: addStudentForm.year || '1'
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setApiStudents(prev => [...prev, { id: data.id, username: data.username, email: data.email, role: 'student', full_name: data.full_name, roll_number: data.roll_number, phone: data.phone ?? null, department: data.department ?? null, section: data.section ?? null, year: data.year ?? null, visible_password: addStudentForm.password }]);
+        setAddStudentOpen(false);
+        setAddStudentForm({ full_name: '', roll_number: '', email: '', password: '', department: '', section: '', year: '1', phone: '' });
+        toast({ title: 'Student added', description: 'New student can log in with email and password.' });
+      } else {
+        const msg = data.email?.[0] || data.roll_number?.[0] || data.username?.[0] || data.detail || 'Could not add student.';
+        toast({ title: 'Add failed', description: String(msg), variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Add failed', description: 'Network error.', variant: 'destructive' });
     }
   };
 
@@ -1051,6 +1104,13 @@ export const AdminLayout: React.FC = () => {
           title: 'Import completed',
           description: `Created ${created} students. Skipped ${skippedExisting} existing and ${skippedInvalid} invalid rows.`,
         });
+        if (created > 0 && activeTab === 'students') {
+          const r = await fetch(apiUrl('/api/users/?role=student'), { credentials: 'include' });
+          if (r.ok) {
+            const list = await r.json();
+            setApiStudents(Array.isArray(list) ? list : []);
+          }
+        }
       } else {
         const message =
           (data && (data.detail || data.error)) ||
@@ -1268,9 +1328,22 @@ export const AdminLayout: React.FC = () => {
           {/* Students Tab */}
           <TabsContent value="students">
             <Card>
-              <CardHeader>
-                <CardTitle>Student Management</CardTitle>
-                <CardDescription>View and manage all students by class (department, section, year). Edit or delete student details.</CardDescription>
+              <CardHeader className="flex flex-row items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle>Student Management</CardTitle>
+                  <CardDescription>Add students (single or bulk import), view and manage by class. Only admin can add students.</CardDescription>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <Button onClick={() => { setAddStudentForm({ full_name: '', roll_number: '', email: '', password: '', department: '', section: '', year: '1', phone: '' }); setAddStudentOpen(true); }}>
+                    <UserPlus className="w-4 h-4 mr-2" /> Add Student
+                  </Button>
+                  <input type="file" accept=".xlsx" className="hidden" id="students-bulk-import" onChange={handleImportFromExcel} />
+                  <Button variant="outline" asChild disabled={isImporting}>
+                    <label htmlFor="students-bulk-import" className="cursor-pointer flex items-center">
+                      {isImporting ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Importing…</> : <><Upload className="w-4 h-4 mr-2" /> Import from Excel</>}
+                    </label>
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-3 items-center">
@@ -1312,7 +1385,7 @@ export const AdminLayout: React.FC = () => {
                     return true;
                   });
                   return filtered.length === 0 ? (
-                    <p className="text-muted-foreground">No students match the filters. Add a branch and register students, or clear filters.</p>
+                    <p className="text-muted-foreground">No students match the filters. Add a student or import from Excel, or clear filters.</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full">
@@ -1358,6 +1431,77 @@ export const AdminLayout: React.FC = () => {
                 })()}
               </CardContent>
             </Card>
+            {/* Add Student Dialog */}
+            <Dialog open={addStudentOpen} onOpenChange={setAddStudentOpen}>
+              <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add Student</DialogTitle>
+                  <DialogDescription>Create a new student account. They can sign in with email and password.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label>Full name</Label>
+                    <Input value={addStudentForm.full_name} onChange={e => setAddStudentForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Full name" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Roll number *</Label>
+                    <Input value={addStudentForm.roll_number} onChange={e => setAddStudentForm(f => ({ ...f, roll_number: e.target.value }))} placeholder="e.g. CSE2021001" required />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Email *</Label>
+                    <Input type="email" value={addStudentForm.email} onChange={e => setAddStudentForm(f => ({ ...f, email: e.target.value }))} placeholder="Email" required />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Password *</Label>
+                    <Input type="password" value={addStudentForm.password} onChange={e => setAddStudentForm(f => ({ ...f, password: e.target.value }))} placeholder="Login password" required />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Phone</Label>
+                    <Input value={addStudentForm.phone} onChange={e => setAddStudentForm(f => ({ ...f, phone: e.target.value }))} placeholder="Phone" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Department</Label>
+                    <Select value={addStudentForm.department} onValueChange={v => setAddStudentForm(f => ({ ...f, department: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">—</SelectItem>
+                        {(apiDepartments || []).map((d: { id: number; code: string; name: string }) => (
+                          <SelectItem key={d.id} value={d.code}>{d.code} – {d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Section</Label>
+                    <Select value={addStudentForm.section} onValueChange={v => setAddStudentForm(f => ({ ...f, section: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">—</SelectItem>
+                        {(apiSections || []).map((s: { id: number; name: string }) => (
+                          <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Year</Label>
+                    <Select value={addStudentForm.year} onValueChange={v => setAddStudentForm(f => ({ ...f, year: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Year 1</SelectItem>
+                        <SelectItem value="2">Year 2</SelectItem>
+                        <SelectItem value="3">Year 3</SelectItem>
+                        <SelectItem value="4">Year 4</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setAddStudentOpen(false)}>Cancel</Button>
+                  <Button onClick={handleSaveAddStudent}><Save className="w-4 h-4 mr-2" /> Add Student</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             {/* Edit Student Dialog */}
             <Dialog open={studentEditOpen} onOpenChange={setStudentEditOpen}>
               <DialogContent className="sm:max-w-md">
