@@ -415,24 +415,23 @@ export const FacultyLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-dashboard-bg">
       {/* Header */}
-      <header className="bg-white border-b shadow-sm">
-        <div className="px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-white/95 backdrop-blur-md shadow-soft">
+        <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
-            <div className="w-10 h-10 bg-success rounded-lg flex items-center justify-center">
-              <GraduationCap className="w-6 h-6 text-success-foreground" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+              <GraduationCap className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold">Faculty Dashboard</h1>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Faculty Dashboard</h1>
               <p className="text-sm text-muted-foreground">Welcome back, {user?.name}</p>
             </div>
           </div>
-          
-          <div className="flex items-center space-x-3">
-            <Button variant="outline" onClick={() => setChangePasswordOpen(true)}>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={() => setChangePasswordOpen(true)} className="rounded-xl flex-1 sm:flex-none">
               <Lock className="w-4 h-4 mr-2" />
               Change password
             </Button>
-            <Button variant="outline" onClick={logout}>
+            <Button variant="outline" onClick={logout} className="rounded-xl flex-1 sm:flex-none">
               <LogOut className="w-4 h-4 mr-2" />
               Logout
             </Button>
@@ -440,9 +439,9 @@ export const FacultyLayout: React.FC = () => {
         </div>
       </header>
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-8">
+          <TabsList className="mb-6 flex flex-wrap gap-1.5 h-auto p-1.5 rounded-xl bg-muted/80">
             <TabsTrigger value="attendance">Mark Attendance</TabsTrigger>
             <TabsTrigger value="student-attendance">Student Attendance</TabsTrigger>
             <TabsTrigger value="reports">My Reports</TabsTrigger>
@@ -450,9 +449,9 @@ export const FacultyLayout: React.FC = () => {
           </TabsList>
 
           {/* Attendance Tab */}
-          <TabsContent value="attendance" className="space-y-6">
+          <TabsContent value="attendance" className="space-y-6 mt-6">
             {/* Controls */}
-            <Card>
+            <Card className="border-emerald-200/50">
               <CardHeader>
                 <CardTitle>Mark Attendance</CardTitle>
                 <CardDescription>Students are listed by your branch and selected year & section. Select date, year, semester, subject, and section.</CardDescription>

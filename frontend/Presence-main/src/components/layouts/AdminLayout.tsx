@@ -1235,24 +1235,23 @@ export const AdminLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-dashboard-bg">
       {/* Header */}
-      <header className="bg-white border-b shadow-sm">
-        <div className="px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-white/95 backdrop-blur-md shadow-soft">
+        <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <GraduationCap className="w-6 h-6 text-primary-foreground" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center shadow-lg shadow-violet-500/25">
+              <GraduationCap className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold">Admin Dashboard</h1>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">Admin Dashboard</h1>
               <p className="text-sm text-muted-foreground">Welcome back, {user?.name}</p>
             </div>
           </div>
-          
-          <div className="flex items-center space-x-3">
-            <Button variant="outline" onClick={() => setChangePasswordOpen(true)}>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={() => setChangePasswordOpen(true)} className="rounded-xl flex-1 sm:flex-none">
               <Lock className="w-4 h-4 mr-2" />
               Change password
             </Button>
-            <Button variant="outline" onClick={logout}>
+            <Button variant="outline" onClick={logout} className="rounded-xl flex-1 sm:flex-none">
               <LogOut className="w-4 h-4 mr-2" />
               Logout
             </Button>
@@ -1260,9 +1259,9 @@ export const AdminLayout: React.FC = () => {
         </div>
       </header>
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-8 flex flex-wrap">
+          <TabsList className="mb-6 flex flex-wrap gap-1.5 h-auto p-1.5 rounded-xl bg-muted/80">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="students">Students</TabsTrigger>
             <TabsTrigger value="branches">Branches</TabsTrigger>
@@ -1277,13 +1276,15 @@ export const AdminLayout: React.FC = () => {
           </TabsList>
 
           {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="space-y-6">
+          <TabsContent value="dashboard" className="space-y-6 mt-6">
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-violet-200/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Students</CardTitle>
-                  <Users className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Total Students</CardTitle>
+                  <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
+                    <Users className="h-5 w-5 text-violet-600" />
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{totalStudentsDisplay}</div>
@@ -1291,10 +1292,12 @@ export const AdminLayout: React.FC = () => {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-blue-200/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Faculty</CardTitle>
-                  <GraduationCap className="h-4 w-4 text-success" />
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Total Faculty</CardTitle>
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <GraduationCap className="h-5 w-5 text-blue-600" />
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{facultyLoading ? '…' : apiFaculty.length}</div>
@@ -1302,10 +1305,12 @@ export const AdminLayout: React.FC = () => {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-cyan-200/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Overall Attendance</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Overall Attendance</CardTitle>
+                  <div className="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center">
+                    <TrendingUp className="h-5 w-5 text-cyan-600" />
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{systemAttendance != null ? `${systemAttendance.attendance_percentage}%` : '—'}</div>
@@ -1315,13 +1320,15 @@ export const AdminLayout: React.FC = () => {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-amber-200/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Defaulters</CardTitle>
-                  <AlertTriangle className="h-4 w-4 text-warning" />
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Defaulters</CardTitle>
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-warning">{defaultersCountDisplay}</div>
+                  <div className="text-2xl font-bold text-amber-600">{defaultersCountDisplay}</div>
                   <p className="text-xs text-muted-foreground">Students below 85%</p>
                 </CardContent>
               </Card>

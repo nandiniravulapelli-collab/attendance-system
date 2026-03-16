@@ -279,20 +279,19 @@ export const StudentLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-dashboard-bg">
       {/* Header */}
-      <header className="bg-white border-b shadow-sm">
-        <div className="px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-white/95 backdrop-blur-md shadow-soft">
+        <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <Users className="w-6 h-6 text-primary-foreground" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center shadow-lg shadow-violet-500/25">
+              <Users className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold">Student Dashboard</h1>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">Student Dashboard</h1>
               <p className="text-sm text-muted-foreground">Welcome back, {user?.name}</p>
             </div>
           </div>
-          
-          <div className="flex items-center space-x-3">
-            <Button variant="outline" onClick={logout}>
+          <div className="w-full sm:w-auto">
+            <Button variant="outline" onClick={logout} className="rounded-xl w-full sm:w-auto">
               <LogOut className="w-4 h-4 mr-2" />
               Logout
             </Button>
@@ -300,9 +299,9 @@ export const StudentLayout: React.FC = () => {
         </div>
       </header>
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-8">
+          <TabsList className="mb-6 flex flex-wrap gap-1.5 h-auto p-1.5 rounded-xl bg-muted/80">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="attendance">My Attendance</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
@@ -310,9 +309,9 @@ export const StudentLayout: React.FC = () => {
           </TabsList>
 
           {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="space-y-6">
+          <TabsContent value="dashboard" className="space-y-6 mt-6">
             {/* Student Info Card */}
-            <Card>
+            <Card className="border-violet-200/50">
               <CardHeader>
                 <CardTitle>Student Information</CardTitle>
               </CardHeader>

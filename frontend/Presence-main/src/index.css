@@ -2,140 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 220 20% 97%;
+    --foreground: 224 71% 4%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 224 71% 4%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 224 71% 4%;
 
-    /* Professional Education System Colors */
-    --primary: 214 100% 35%;
-    --primary-foreground: 0 0% 98%;
-    --primary-light: 214 100% 45%;
-    --primary-glow: 214 100% 85%;
+    /* Modern blue / purple / cyan palette */
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 262 83% 68%;
+    --primary-glow: 262 83% 92%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 224 71% 4%;
 
-    --success: 158 64% 30%;
-    --success-foreground: 0 0% 98%;
-    --success-light: 158 64% 40%;
-    --success-glow: 158 64% 85%;
+    --accent-cyan: 189 94% 43%;
+    --accent-blue: 217 91% 60%;
 
-    --warning: 25 95% 53%;
-    --warning-foreground: 0 0% 98%;
-    --warning-light: 25 95% 63%;
-    --warning-glow: 25 95% 85%;
+    --success: 158 64% 42%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 158 64% 52%;
+    --success-glow: 158 64% 90%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-light: 38 92% 60%;
+    --warning-glow: 38 92% 90%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --accent: 262 83% 96%;
+    --accent-foreground: 262 83% 30%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 214 100% 35%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 262 83% 58%;
 
     --radius: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.25rem;
 
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
-    --gradient-success: linear-gradient(135deg, hsl(var(--success)), hsl(var(--success-light)));
-    --gradient-warning: linear-gradient(135deg, hsl(var(--warning)), hsl(var(--warning-light)));
-    
-    /* Dashboard specific */
-    --dashboard-bg: 220 14% 96%;
+    --shadow-soft: 0 2px 15px -3px rgb(0 0 0 / 0.07), 0 10px 20px -2px rgb(0 0 0 / 0.04);
+    --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 10px 15px -3px rgb(0 0 0 / 0.08);
+    --shadow-card-hover: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.04);
+
+    --gradient-hero: linear-gradient(135deg, hsl(262 83% 58%) 0%, hsl(217 91% 60%) 50%, hsl(189 94% 43%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(262 83% 98%) 100%);
+    --gradient-sidebar: linear-gradient(180deg, hsl(262 83% 58%) 0%, hsl(262 83% 45%) 100%);
+
+    --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.35s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    --dashboard-bg: 220 20% 97%;
     --dashboard-card: 0 0% 100%;
-    --dashboard-accent: 214 100% 95%;
+    --dashboard-accent: 262 83% 96%;
 
-    /* Animations */
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 262 30% 12%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 262 83% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 262 20% 20%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 262 15% 22%;
+    --sidebar-ring: 262 83% 58%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 224 71% 4%;
     --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
+    --card: 224 30% 8%;
     --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --primary-light: 210 40% 88%;
-    --primary-glow: 214 100% 25%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --success: 158 64% 40%;
-    --success-foreground: 0 0% 98%;
-    --success-light: 158 64% 50%;
-    --success-glow: 158 64% 25%;
-
-    --warning: 25 95% 63%;
-    --warning-foreground: 0 0% 98%;
-    --warning-light: 25 95% 73%;
-    --warning-glow: 25 95% 25%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 214 100% 45%;
-
-    /* Dashboard specific - dark mode */
-    --dashboard-bg: 220 13% 12%;
-    --dashboard-card: 220 13% 15%;
-    --dashboard-accent: 214 100% 25%;
-
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --primary: 262 83% 65%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215 20% 65%;
+    --border: 217 33% 17%;
+    --dashboard-bg: 224 71% 4%;
+    --dashboard-card: 224 30% 8%;
+    --sidebar-background: 262 25% 8%;
+    --sidebar-accent: 262 20% 15%;
   }
 }
 
@@ -145,6 +100,40 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .card-modern {
+    @apply rounded-xl border border-border/60 bg-card shadow-[var(--shadow-card)] transition-[box-shadow,transform] duration-300;
+    box-shadow: var(--shadow-card);
+  }
+  .card-modern:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .btn-gradient {
+    background: var(--gradient-hero);
+    @apply text-white font-medium rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200;
+  }
+
+  .glass-card {
+    @apply rounded-xl border border-white/20 bg-white/80 backdrop-blur-md shadow-[var(--shadow-soft)];
+  }
+
+  .nav-pill {
+    @apply rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 data-[state=active]:shadow-md;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
   }
 }
