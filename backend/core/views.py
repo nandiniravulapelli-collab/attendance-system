@@ -352,15 +352,15 @@ def user_detail_view(request, pk):
         return Response(status=204)
 
 
-# --- Departments (Branches) - Admin only ---
+# --- Departments (Branches) - GET allowed for all authenticated (e.g. student profile edit); POST admin only ---
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def department_list_view(request):
-    if request.user.role != 'admin' and not request.user.is_superuser:
-        return Response({"detail": "Admin only."}, status=403)
     if request.method == 'GET':
         qs = Department.objects.all().order_by('code')
         return Response(DepartmentSerializer(qs, many=True).data)
+    if request.user.role != 'admin' and not request.user.is_superuser:
+        return Response({"detail": "Admin only."}, status=403)
     # POST
     serializer = DepartmentSerializer(data=request.data)
     if serializer.is_valid():
@@ -372,14 +372,14 @@ def department_list_view(request):
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def department_detail_view(request, pk):
-    if request.user.role != 'admin' and not request.user.is_superuser:
-        return Response({"detail": "Admin only."}, status=403)
     try:
         dept = Department.objects.get(pk=pk)
     except Department.DoesNotExist:
         return Response({"detail": "Not found."}, status=404)
     if request.method == 'GET':
         return Response(DepartmentSerializer(dept).data)
+    if request.user.role != 'admin' and not request.user.is_superuser:
+        return Response({"detail": "Admin only."}, status=403)
     if request.method == 'PATCH':
         serializer = DepartmentSerializer(dept, data=request.data, partial=True)
         if serializer.is_valid():

@@ -79,15 +79,19 @@ export const StudentLayout: React.FC = () => {
     fetchProfile();
   }, [numericId, activeTab]);
 
-  useEffect(() => {
-    if (activeTab !== 'profile') return;
+  const fetchDepartments = () => {
     fetch(apiUrl('/api/departments/'), { credentials: 'include' })
       .then(res => res.ok ? res.json() : [])
       .then((data: unknown) => setApiDepartments(Array.isArray(data) ? data : []))
       .catch(() => setApiDepartments([]));
+  };
+  useEffect(() => {
+    if (activeTab !== 'profile') return;
+    fetchDepartments();
   }, [activeTab]);
 
   const handleOpenEditProfile = async () => {
+    if (apiDepartments.length === 0) fetchDepartments();
     let profile = apiProfile;
     if (numericId != null && !profile) {
       try {
