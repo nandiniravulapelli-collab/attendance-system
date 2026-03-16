@@ -591,6 +591,8 @@ export const AdminLayout: React.FC = () => {
   const [systemAttendance, setSystemAttendance] = useState<{ total_classes: number; present_count: number; attendance_percentage: number } | null>(null);
   const [backendStudentCount, setBackendStudentCount] = useState<number | null>(null);
   const [backendDefaulters, setBackendDefaulters] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; department: string | null; attendancePercentage: number; presentClasses: number; totalClasses: number }>>([]);
+  const [dashboardWeeklyTrend, setDashboardWeeklyTrend] = useState<Array<{ name: string; attendance: number }>>([]);
+  const [dashboardDistributionPie, setDashboardDistributionPie] = useState<Array<{ name: string; value: number; color: string }>>([]);
 
   useEffect(() => {
     if (activeTab !== 'dashboard') return;
@@ -609,7 +611,7 @@ export const AdminLayout: React.FC = () => {
     Promise.all([
       fetch(apiUrl('/api/users/?role=student'), { credentials: 'include' }).then(r => r.ok ? r.json() : []),
       fetch(apiUrl('/api/attendance/'), { credentials: 'include' }).then(r => r.ok ? r.json() : { records: [] })
-    ]).then(([studentsList, attData]: [Array<{ id: number; full_name?: string | null; roll_number?: string | null; department?: string | null }>, { records?: Array<{ student: number; status: string }> }]) => {
+    ]).then(([studentsList, attData]: [Array<{ id: number; full_name?: string | null; roll_number?: string | null; department?: string | null }>, { records?: Array<{ student: number; status: string; date?: string }> }]) => {
       const list = Array.isArray(studentsList) ? studentsList : [];
       setBackendStudentCount(list.length);
       const records = Array.isArray(attData?.records) ? attData.records : [];
@@ -628,9 +630,61 @@ export const AdminLayout: React.FC = () => {
         })
         .filter((s: { attendancePercentage: number }) => s.attendancePercentage < 85);
       setBackendDefaulters(defaultersList);
+
+      // Weekly trend: average attendance % by day of week (Mon–Sun)
+      const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const byDate: Record<string, { present: number; total: number }> = {};
+      records.forEach((r: { student: number; status: string; date?: string }) => {
+        const d = r.date ?? '';
+        if (!d) return;
+        if (!byDate[d]) byDate[d] = { present: 0, total: 0 };
+        byDate[d].total++;
+        if (String(r.status).toLowerCase() === 'present') byDate[d].present++;
+      });
+      const byDayOfWeek: Record<number, number[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+      Object.entries(byDate).forEach(([dateStr, { present, total }]) => {
+        if (total === 0) return;
+        const pct = (present / total) * 100;
+        try {
+          const d = new Date(dateStr);
+          const day = d.getDay();
+          byDayOfWeek[day].push(pct);
+        } catch {
+          // skip invalid date
+        }
+      });
+      const weeklyTrend = dayNames.map((name, i) => {
+        const dayIndex = i === 6 ? 0 : i + 1;
+        const arr = byDayOfWeek[dayIndex] || [];
+        const avg = arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+        return { name, attendance: Math.round(avg * 10) / 10 };
+      });
+      setDashboardWeeklyTrend(weeklyTrend);
+
+      // Distribution: bucket students by attendance %
+      const studentsWithPct = list.map((s: { id: number }) => {
+        const stat = byStudent[s.id] || { present: 0, total: 0 };
+        return stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
+      });
+      const buckets = [
+        { label: '90–100%', min: 90, max: 101, color: 'hsl(142, 76%, 36%)' },
+        { label: '75–90%', min: 75, max: 90, color: 'hsl(142, 56%, 51%)' },
+        { label: '50–75%', min: 50, max: 75, color: 'hsl(38, 92%, 50%)' },
+        { label: 'Below 50%', min: 0, max: 50, color: 'hsl(0, 84%, 60%)' }
+      ];
+      const counts = buckets.map(b => studentsWithPct.filter(p => p >= b.min && p < b.max).length);
+      const totalStudents = list.length;
+      const distributionPie = buckets.map((b, i) => ({
+        name: b.label,
+        value: totalStudents > 0 ? Math.round((counts[i] / totalStudents) * 100) : 0,
+        color: b.color
+      })).filter(d => d.value > 0);
+      setDashboardDistributionPie(distributionPie);
     }).catch(() => {
       setBackendStudentCount(null);
       setBackendDefaulters([]);
+      setDashboardWeeklyTrend([]);
+      setDashboardDistributionPie([]);
     });
   }, [activeTab]);
 
@@ -638,8 +692,8 @@ export const AdminLayout: React.FC = () => {
   const defaultersCountDisplay = backendDefaulters.length;
   const defaultersToShow = backendDefaulters;
 
-  const attendanceData: Array<{ name: string; attendance: number }> = [];
-  const pieData: Array<{ name: string; value: number; color: string }> = [];
+  const attendanceData = dashboardWeeklyTrend;
+  const pieData = dashboardDistributionPie;
 
   // Mark Attendance (admin - same as faculty)
   const [attDept, setAttDept] = useState<string>('__all__');
