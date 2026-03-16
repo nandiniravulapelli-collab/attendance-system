@@ -24,6 +24,10 @@ def register(request):
         depts = data.get('departments')
         data['department'] = ','.join(depts) if isinstance(depts, (list, tuple)) else (depts or '')
         data.pop('departments', None)
+    if 'subjects' in data:
+        subjs = data.get('subjects')
+        data['assigned_subject_ids'] = ','.join(str(x) for x in (subjs if isinstance(subjs, (list, tuple)) else [])) if subjs else ''
+        data.pop('subjects', None)
     serializer = RegisterSerializer(data=data)
     if serializer.is_valid():
         serializer.save()
@@ -324,6 +328,10 @@ def user_detail_view(request, pk):
             depts = data.get('departments')
             data['department'] = ','.join(depts) if isinstance(depts, (list, tuple)) else (depts or '')
             data.pop('departments', None)
+        if 'subjects' in data:
+            subjs = data.get('subjects')
+            data['assigned_subject_ids'] = ','.join(str(x) for x in (subjs if isinstance(subjs, (list, tuple)) else [])) if subjs else ''
+            data.pop('subjects', None)
         serializer = UserSerializer(target, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()

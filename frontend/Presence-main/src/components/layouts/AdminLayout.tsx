@@ -161,6 +161,7 @@ export const AdminLayout: React.FC = () => {
     phone: string | null;
     department: string | null;
     departments?: string[];
+    subjects?: string[];
     visible_password?: string | null;
   }>>([]);
   const [facultyLoading, setFacultyLoading] = useState(false);
@@ -959,6 +960,7 @@ export const AdminLayout: React.FC = () => {
       const depts = Array.isArray(member.departments) && member.departments.length > 0
         ? member.departments
         : (member.department ?? '').split(',').map((d: string) => d.trim()).filter(Boolean);
+      const subjectIds = Array.isArray(member.subjects) ? member.subjects.map(String) : [];
       setSelectedFaculty(facultyId);
       setFacultyFormData({
         name: member.full_name ?? member.username,
@@ -966,7 +968,7 @@ export const AdminLayout: React.FC = () => {
         password: '',
         departmentIds: depts,
         phone: member.phone ?? '',
-        subjects: []
+        subjects: subjectIds
       });
       setIsFacultyDialogOpen(true);
     }
@@ -1026,7 +1028,8 @@ export const AdminLayout: React.FC = () => {
             email: facultyFormData.email,
             ...(facultyFormData.password ? { new_password: facultyFormData.password } : {}),
             phone: facultyFormData.phone || '',
-            departments: deptIds
+            departments: deptIds,
+            subjects: facultyFormData.subjects || []
           })
         });
         if (res.ok) {
@@ -1051,6 +1054,7 @@ export const AdminLayout: React.FC = () => {
             full_name: facultyFormData.name,
             phone: facultyFormData.phone || '',
             departments: deptIds,
+            subjects: facultyFormData.subjects || [],
             roll_number: '',
             section: '',
             year: ''
@@ -1064,7 +1068,8 @@ export const AdminLayout: React.FC = () => {
         }
         const savedDept = data.department ?? (deptIds.join(',') || '');
         const savedDepts = Array.isArray(data.departments) ? data.departments : (savedDept ? savedDept.split(',').map((d: string) => d.trim()).filter(Boolean) : []);
-        setApiFaculty(prev => [...prev, { id: data.id, username: data.username ?? data.email, email: data.email, role: 'faculty', full_name: data.full_name ?? facultyFormData.name, phone: data.phone ?? null, department: savedDept, departments: savedDepts }]);
+        const savedSubjects = Array.isArray(data.subjects) ? data.subjects : [];
+        setApiFaculty(prev => [...prev, { id: data.id, username: data.username ?? data.email, email: data.email, role: 'faculty', full_name: data.full_name ?? facultyFormData.name, phone: data.phone ?? null, department: savedDept, departments: savedDepts, subjects: savedSubjects }]);
         toast({ title: 'Faculty Added', description: 'New faculty member can now log in with their email and password.' });
       }
 
@@ -1968,7 +1973,15 @@ export const AdminLayout: React.FC = () => {
                               </td>
                               <td className="p-3 font-mono text-sm">{member.visible_password ?? '—'}</td>
                               <td className="p-3">
-                                <span className="text-xs text-muted-foreground">—</span>
+                                {(() => {
+                                  const ids = Array.isArray(member.subjects) ? member.subjects : [];
+                                  if (ids.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+                                  const labels = ids.map((id: string) => {
+                                    const s = (apiSubjects || []).find((subj: { id: number }) => String(subj.id) === String(id));
+                                    return s ? `${s.code}` : id;
+                                  });
+                                  return <span className="text-xs">{labels.join(', ')}</span>;
+                                })()}
                               </td>
                               <td className="p-3 text-sm">{member.phone ?? '—'}</td>
                               <td className="p-3">

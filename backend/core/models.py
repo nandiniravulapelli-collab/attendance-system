@@ -51,6 +51,8 @@ class User(AbstractUser):
     year = models.CharField(max_length=50, blank=True, null=True)
     # Stored only for admin visibility after password change (insecure; use with caution)
     visible_password = models.CharField(max_length=128, blank=True, null=True)
+    # Comma-separated subject IDs assigned to faculty (e.g. "1,3,5")
+    assigned_subject_ids = models.CharField(max_length=500, blank=True, null=True)
 
 class Attendance(models.Model):
     student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='attendances')
