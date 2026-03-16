@@ -63,6 +63,7 @@ export const StudentLayout: React.FC = () => {
   });
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [changePasswordForm, setChangePasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
+  const [apiDepartments, setApiDepartments] = useState<Array<{ id: number; name: string; code: string }>>([]);
 
   const numericId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
   useEffect(() => {
@@ -77,6 +78,14 @@ export const StudentLayout: React.FC = () => {
     };
     fetchProfile();
   }, [numericId, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'profile') return;
+    fetch(apiUrl('/api/departments/'), { credentials: 'include' })
+      .then(res => res.ok ? res.json() : [])
+      .then((data: unknown) => setApiDepartments(Array.isArray(data) ? data : []))
+      .catch(() => setApiDepartments([]));
+  }, [activeTab]);
 
   const handleOpenEditProfile = async () => {
     let profile = apiProfile;
@@ -161,9 +170,9 @@ export const StudentLayout: React.FC = () => {
     }
   };
 
-  const departments = db.getDepartments();
+  const departments = apiDepartments;
   const student = db.getStudents().find(s => s.id === user?.id);
-  const department = departments.find(d => d.id === student?.departmentId || d.code === apiProfile?.department);
+  const department = departments.find(d => d.code === apiProfile?.department);
   const mockAttendance = db.getStudentAttendance(user?.id || '');
 
   const [apiAttendance, setApiAttendance] = useState<{
