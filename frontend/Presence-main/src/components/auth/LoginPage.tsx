@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, Shield, GraduationCap, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Users, Shield, GraduationCap, Eye, EyeOff } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 export const LoginPage: React.FC = () => {
@@ -51,9 +51,6 @@ export const LoginPage: React.FC = () => {
       <div className="w-full max-w-md relative z-10 space-y-8">
         {/* Header */}
         <div className="text-center space-y-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-blue-600 shadow-lg shadow-violet-500/30 mb-2">
-            <Sparkles className="w-8 h-8 text-white" />
-          </div>
           <img
             src="/logo.png"
             alt="Sumathi Reddy Institute of Technology for Women"
