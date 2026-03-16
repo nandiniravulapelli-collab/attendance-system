@@ -51,12 +51,9 @@ export const LoginPage: React.FC = () => {
       <div className="w-full max-w-md relative z-10 space-y-8">
         {/* Header */}
         <div className="text-center space-y-4">
-          <img
-            src="/logo.png"
-            alt="Sumathi Reddy Institute of Technology for Women"
-            className="mx-auto w-full max-w-[280px] h-auto object-contain drop-shadow-sm"
-            style={{ maxHeight: '100px' }}
-          />
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Sumathi Reddy Institute of Technology for Women
+          </h1>
           <p className="text-muted-foreground text-sm font-medium">Sign in to your account</p>
         </div>
 
