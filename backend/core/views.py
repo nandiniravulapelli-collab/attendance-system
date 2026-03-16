@@ -19,7 +19,12 @@ from .serializers import (
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
-    serializer = RegisterSerializer(data=request.data)
+    data = request.data.copy()
+    if 'departments' in data:
+        depts = data.get('departments')
+        data['department'] = ','.join(depts) if isinstance(depts, (list, tuple)) else (depts or '')
+        data.pop('departments', None)
+    serializer = RegisterSerializer(data=data)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=201)
@@ -218,8 +223,10 @@ def user_list_view(request):
 
     qs = User.objects.filter(role=role).order_by('id')
     if is_faculty:
-        if request.user.department:
-            qs = qs.filter(department=request.user.department)
+        dept_str = (request.user.department or '').strip()
+        dept_list = [x.strip() for x in dept_str.split(',') if x.strip()]
+        if dept_list:
+            qs = qs.filter(department__in=dept_list)
             section = request.query_params.get('section', '').strip()
             if section:
                 qs = qs.filter(section=section)
@@ -260,7 +267,11 @@ def user_detail_view(request, pk):
     is_admin = request.user.role == 'admin' or request.user.is_superuser
     is_faculty = request.user.role == 'faculty'
     is_self = request.user.id == target.id
-    faculty_can_edit_student = is_faculty and target.role == 'student' and target.department == request.user.department
+    _dept_str = (request.user.department or '').strip()
+    _dept_list = [x.strip() for x in _dept_str.split(',') if x.strip()]
+    faculty_can_edit_student = is_faculty and target.role == 'student' and (
+        (target.department in _dept_list) if _dept_list else (target.department == request.user.department)
+    )
 
     if not (is_admin or is_self or faculty_can_edit_student):
         return Response({"detail": "Not allowed to access this user."}, status=403)
@@ -309,6 +320,10 @@ def user_detail_view(request, pk):
             target.username = new_username
             target.save(update_fields=['username'])
 
+        if 'departments' in data:
+            depts = data.get('departments')
+            data['department'] = ','.join(depts) if isinstance(depts, (list, tuple)) else (depts or '')
+            data.pop('departments', None)
         serializer = UserSerializer(target, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()

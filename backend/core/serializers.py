@@ -56,15 +56,21 @@ class LoginSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     """Read and update user (e.g. student details). No password exposure."""
+    departments = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = User
         fields = (
             'id', 'username', 'email', 'role',
             'full_name', 'roll_number', 'phone',
-            'department', 'section', 'year'
+            'department', 'departments', 'section', 'year'
         )
         read_only_fields = ('id', 'username', 'email', 'role')
         extra_kwargs = {}
+
+    def get_departments(self, obj):
+        s = (obj.department or '').strip()
+        return [x.strip() for x in s.split(',') if x.strip()]
 
     def update(self, instance, validated_data):
         # Don't allow changing username/email/role via this serializer

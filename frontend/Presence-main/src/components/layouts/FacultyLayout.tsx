@@ -54,12 +54,16 @@ export const FacultyLayout: React.FC = () => {
 
   const facultyId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
 
-  // Faculty department from logged-in user (backend sends department on login)
-  const facultyDeptCode = (user?.departmentId ?? '').toString().trim();
+  // Faculty departments from logged-in user (backend sends department as comma-separated on login)
+  const facultyDeptCodes = (user?.departmentId ?? '')
+    .toString()
+    .split(',')
+    .map((d: string) => d.trim())
+    .filter(Boolean);
 
-  // Subjects: from API, filtered by faculty's department so they can mark attendance
-  const subjectsAll = facultyDeptCode && apiSubjects.length > 0
-    ? apiSubjects.filter((s: { department_code?: string }) => s.department_code === facultyDeptCode)
+  // Subjects: from API, filtered by faculty's department(s) so they can mark attendance
+  const subjectsAll = facultyDeptCodes.length > 0 && apiSubjects.length > 0
+    ? apiSubjects.filter((s: { department_code?: string }) => facultyDeptCodes.includes(s.department_code ?? ''))
     : apiSubjects;
   const subjects = selectedSemester && selectedSemester !== '__all__'
     ? subjectsAll.filter((s: { semester?: string }) => String(s.semester ?? '1') === selectedSemester)
@@ -81,12 +85,12 @@ export const FacultyLayout: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!facultyDeptCode) {
+    if (facultyDeptCodes.length === 0) {
       setApiStudents([]);
       return;
     }
     setStudentsLoading(true);
-    const params = new URLSearchParams({ role: 'student', department: facultyDeptCode });
+    const params = new URLSearchParams({ role: 'student' });
     if (selectedSection) params.set('section', selectedSection);
     if (selectedYear && selectedYear !== '__all__') params.set('year', selectedYear);
     fetch(apiUrl(`/api/users/?${params}`), { credentials: 'include' })
@@ -94,7 +98,7 @@ export const FacultyLayout: React.FC = () => {
       .then((data: unknown) => setApiStudents(Array.isArray(data) ? data : []))
       .catch(() => setApiStudents([]))
       .finally(() => setStudentsLoading(false));
-  }, [facultyDeptCode, selectedSection, selectedYear]);
+  }, [facultyDeptCodes.length, selectedSection, selectedYear]);
 
   useEffect(() => {
     if (user?.role !== 'faculty' && user?.role !== 'admin') return;
@@ -521,7 +525,7 @@ export const FacultyLayout: React.FC = () => {
                       <SelectContent>
                         {subjects.length === 0 ? (
                           <SelectItem key="__none__" value="__none__" disabled className="text-muted-foreground">
-                            {!facultyDeptCode ? 'Select department / log in again' : 'No subjects for your department — add in Admin → Subjects'}
+                            {facultyDeptCodes.length === 0 ? 'No departments assigned / log in again' : 'No subjects for your department(s) — add in Admin → Subjects'}
                           </SelectItem>
                         ) : (
                           subjects.map((subject: { id: string | number; name: string; code: string }) => (

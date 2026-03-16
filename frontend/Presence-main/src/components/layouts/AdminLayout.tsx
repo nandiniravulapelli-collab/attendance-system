@@ -60,13 +60,20 @@ export const AdminLayout: React.FC = () => {
   const [isFacultyDialogOpen, setIsFacultyDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedFaculty, setSelectedFaculty] = useState<string | null>(null);
-  const [facultyFormData, setFacultyFormData] = useState({
+  const [facultyFormData, setFacultyFormData] = useState<{
+    name: string;
+    email: string;
+    password: string;
+    departmentIds: string[];
+    phone: string;
+    subjects: string[];
+  }>({
     name: '',
     email: '',
     password: '',
-    departmentId: '',
+    departmentIds: [],
     phone: '',
-    subjects: [] as string[]
+    subjects: []
   });
 
   // Students from backend API (for edit after registration)
@@ -153,6 +160,7 @@ export const AdminLayout: React.FC = () => {
     full_name: string | null;
     phone: string | null;
     department: string | null;
+    departments?: string[];
     visible_password?: string | null;
   }>>([]);
   const [facultyLoading, setFacultyLoading] = useState(false);
@@ -938,7 +946,7 @@ export const AdminLayout: React.FC = () => {
       name: '',
       email: '',
       password: '',
-      departmentId: '',
+      departmentIds: [],
       phone: '',
       subjects: []
     });
@@ -948,12 +956,15 @@ export const AdminLayout: React.FC = () => {
   const handleEditFaculty = (facultyId: string) => {
     const member = apiFaculty.find(f => String(f.id) === facultyId);
     if (member) {
+      const depts = Array.isArray(member.departments) && member.departments.length > 0
+        ? member.departments
+        : (member.department ?? '').split(',').map((d: string) => d.trim()).filter(Boolean);
       setSelectedFaculty(facultyId);
       setFacultyFormData({
         name: member.full_name ?? member.username,
         email: member.email,
         password: '',
-        departmentId: member.department ?? '',
+        departmentIds: depts,
         phone: member.phone ?? '',
         subjects: []
       });
@@ -986,10 +997,11 @@ export const AdminLayout: React.FC = () => {
 
   const handleSaveFaculty = async () => {
     try {
-      if (!facultyFormData.name || !facultyFormData.email || !facultyFormData.departmentId) {
+      const deptIds = Array.isArray(facultyFormData.departmentIds) ? facultyFormData.departmentIds : [];
+      if (!facultyFormData.name || !facultyFormData.email || deptIds.length === 0) {
         toast({
           title: 'Validation Error',
-          description: 'Please fill in all required fields.',
+          description: 'Please fill in all required fields and select at least one department.',
           variant: 'destructive'
         });
         return;
@@ -1014,7 +1026,7 @@ export const AdminLayout: React.FC = () => {
             email: facultyFormData.email,
             ...(facultyFormData.password ? { new_password: facultyFormData.password } : {}),
             phone: facultyFormData.phone || '',
-            department: facultyFormData.departmentId
+            departments: deptIds
           })
         });
         if (res.ok) {
@@ -1027,7 +1039,6 @@ export const AdminLayout: React.FC = () => {
           return;
         }
       } else {
-        const deptCode = facultyFormData.departmentId;
         const res = await fetch(apiUrl('/api/register/'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1039,7 +1050,7 @@ export const AdminLayout: React.FC = () => {
             role: 'faculty',
             full_name: facultyFormData.name,
             phone: facultyFormData.phone || '',
-            department: deptCode,
+            departments: deptIds,
             roll_number: '',
             section: '',
             year: ''
@@ -1051,7 +1062,9 @@ export const AdminLayout: React.FC = () => {
           toast({ title: 'Could not add faculty', description: String(msg), variant: 'destructive' });
           return;
         }
-        setApiFaculty(prev => [...prev, { id: data.id, username: data.username ?? data.email, email: data.email, role: 'faculty', full_name: data.full_name ?? facultyFormData.name, phone: data.phone ?? null, department: data.department ?? deptCode }]);
+        const savedDept = data.department ?? (deptIds.join(',') || '');
+        const savedDepts = Array.isArray(data.departments) ? data.departments : (savedDept ? savedDept.split(',').map((d: string) => d.trim()).filter(Boolean) : []);
+        setApiFaculty(prev => [...prev, { id: data.id, username: data.username ?? data.email, email: data.email, role: 'faculty', full_name: data.full_name ?? facultyFormData.name, phone: data.phone ?? null, department: savedDept, departments: savedDepts }]);
         toast({ title: 'Faculty Added', description: 'New faculty member can now log in with their email and password.' });
       }
 
@@ -1061,7 +1074,7 @@ export const AdminLayout: React.FC = () => {
         name: '',
         email: '',
         password: '',
-        departmentId: '',
+        departmentIds: [],
         phone: '',
         subjects: []
       });
@@ -1933,7 +1946,7 @@ export const AdminLayout: React.FC = () => {
                           <tr className="border-b">
                             <th className="text-left p-3">Name</th>
                             <th className="text-left p-3">Email</th>
-                            <th className="text-left p-3">Department</th>
+                            <th className="text-left p-3">Departments</th>
                             <th className="text-left p-3">Password</th>
                             <th className="text-left p-3">Subjects</th>
                             <th className="text-left p-3">Contact</th>
@@ -1946,7 +1959,12 @@ export const AdminLayout: React.FC = () => {
                               <td className="p-3 font-medium">{member.full_name ?? member.username}</td>
                               <td className="p-3 text-sm text-muted-foreground">{member.email}</td>
                               <td className="p-3">
-                                <Badge variant="secondary">{member.department ?? 'N/A'}</Badge>
+                                {(() => {
+                                  const depts = Array.isArray(member.departments) && member.departments.length > 0
+                                    ? member.departments
+                                    : (member.department ?? '').split(',').map((d: string) => d.trim()).filter(Boolean);
+                                  return depts.length > 0 ? depts.join(', ') : 'N/A';
+                                })()}
                               </td>
                               <td className="p-3 font-mono text-sm">{member.visible_password ?? '—'}</td>
                               <td className="p-3">
@@ -2043,22 +2061,36 @@ export const AdminLayout: React.FC = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="faculty-department">Department *</Label>
-                    <Select 
-                      value={facultyFormData.departmentId} 
-                      onValueChange={(value) => setFacultyFormData({...facultyFormData, departmentId: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {apiDepartments.map((dept: { id: string | number; code: string; name: string }) => (
-                          <SelectItem key={String(dept.id)} value={dept.code}>
-                            {dept.code} - {dept.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Departments *</Label>
+                    <p className="text-xs text-muted-foreground">Select one or more departments for this faculty member.</p>
+                    <div className="border rounded-lg p-4 max-h-40 overflow-y-auto">
+                      {apiDepartments.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No departments. Add departments in the Branches tab first.</p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                          {apiDepartments.map((dept: { id: string | number; code: string; name: string }) => (
+                            <div key={String(dept.id)} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`faculty-dept-${dept.id}`}
+                                checked={facultyFormData.departmentIds.includes(dept.code)}
+                                onCheckedChange={(checked) => {
+                                  const next = checked
+                                    ? [...facultyFormData.departmentIds, dept.code]
+                                    : facultyFormData.departmentIds.filter((c: string) => c !== dept.code);
+                                  setFacultyFormData({ ...facultyFormData, departmentIds: next });
+                                }}
+                              />
+                              <label
+                                htmlFor={`faculty-dept-${dept.id}`}
+                                className="text-sm font-medium leading-none cursor-pointer"
+                              >
+                                {dept.code} - {dept.name}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -2066,9 +2098,9 @@ export const AdminLayout: React.FC = () => {
                     <p className="text-xs text-muted-foreground">Subjects from the Subjects tab (by branch, year, semester)</p>
                     <div className="border rounded-lg p-4 max-h-48 overflow-y-auto">
                       {(() => {
-                        const facultyDeptCode = facultyFormData.departmentId;
+                        const facultyDeptCodes = facultyFormData.departmentIds || [];
                         const assignableSubjects = (Array.isArray(apiSubjects) ? apiSubjects : []).filter(
-                          (s: { department_code: string }) => s.department_code === facultyDeptCode
+                          (s: { department_code: string }) => facultyDeptCodes.length === 0 || facultyDeptCodes.includes(s.department_code)
                         );
                         if (assignableSubjects.length === 0) {
                           return <p className="text-sm text-muted-foreground">No subjects for this branch. Add subjects in the Subjects tab first.</p>;
