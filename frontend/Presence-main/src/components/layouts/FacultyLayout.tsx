@@ -37,10 +37,12 @@ export const FacultyLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedSection, setSelectedSection] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>('__all__');
   const [selectedSemester, setSelectedSemester] = useState<string>('__all__');
+  const [apiDepartments, setApiDepartments] = useState<Array<{ id: number; name: string; code: string }>>([]);
   const [attendanceData, setAttendanceData] = useState<Record<string, number>>({});
   const [sessionTotalHours, setSessionTotalHours] = useState<number>(1);
   const [apiStudents, setApiStudents] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; email: string; department: string | null; section: string | null; year: string | null }>>([]);
@@ -61,14 +63,18 @@ export const FacultyLayout: React.FC = () => {
     .map((d: string) => d.trim())
     .filter(Boolean);
 
-  // Subjects: from API, filtered by faculty's department(s) so they can mark attendance
+  // Subjects: from API, filtered by faculty's department(s) and selected branch
   const subjectsAll = facultyDeptCodes.length > 0 && apiSubjects.length > 0
     ? apiSubjects.filter((s: { department_code?: string }) => facultyDeptCodes.includes(s.department_code ?? ''))
     : apiSubjects;
-  const subjects = selectedSemester && selectedSemester !== '__all__'
-    ? subjectsAll.filter((s: { semester?: string }) => String(s.semester ?? '1') === selectedSemester)
+  const subjectsByBranch = selectedBranch
+    ? subjectsAll.filter((s: { department_code?: string }) => s.department_code === selectedBranch)
     : subjectsAll;
+  const subjects = selectedSemester && selectedSemester !== '__all__'
+    ? subjectsByBranch.filter((s: { semester?: string }) => String(s.semester ?? '1') === selectedSemester)
+    : subjectsByBranch;
   const validSubjectValue = subjects.some(s => String(s.id) === selectedSubject) ? selectedSubject : '';
+  const facultyBranchOptions = apiDepartments.filter((d: { code: string }) => facultyDeptCodes.includes(d.code));
 
   useEffect(() => {
     fetch(apiUrl('/api/subjects/'), { credentials: 'include' })
@@ -85,12 +91,26 @@ export const FacultyLayout: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    fetch(apiUrl('/api/departments/'), { credentials: 'include' })
+      .then(res => res.ok ? res.json() : [])
+      .then((data: unknown) => setApiDepartments(Array.isArray(data) ? data : []))
+      .catch(() => setApiDepartments([]));
+  }, []);
+
+  useEffect(() => {
+    if (facultyDeptCodes.length === 1 && !selectedBranch) {
+      setSelectedBranch(facultyDeptCodes[0]);
+    }
+  }, [facultyDeptCodes.length, selectedBranch]);
+
+  useEffect(() => {
     if (facultyDeptCodes.length === 0) {
       setApiStudents([]);
       return;
     }
     setStudentsLoading(true);
     const params = new URLSearchParams({ role: 'student' });
+    if (selectedBranch) params.set('department', selectedBranch);
     if (selectedSection) params.set('section', selectedSection);
     if (selectedYear && selectedYear !== '__all__') params.set('year', selectedYear);
     fetch(apiUrl(`/api/users/?${params}`), { credentials: 'include' })
@@ -98,7 +118,7 @@ export const FacultyLayout: React.FC = () => {
       .then((data: unknown) => setApiStudents(Array.isArray(data) ? data : []))
       .catch(() => setApiStudents([]))
       .finally(() => setStudentsLoading(false));
-  }, [facultyDeptCodes.length, selectedSection, selectedYear]);
+  }, [facultyDeptCodes.length, selectedBranch, selectedSection, selectedYear]);
 
   useEffect(() => {
     if (user?.role !== 'faculty' && user?.role !== 'admin') return;
@@ -454,10 +474,31 @@ export const FacultyLayout: React.FC = () => {
             <Card className="border-emerald-200/50">
               <CardHeader>
                 <CardTitle>Mark Attendance</CardTitle>
-                <CardDescription>Students are listed by your branch and selected year & section. Select date, year, semester, subject, and section.</CardDescription>
+                <CardDescription>Students are listed by your branch and selected year & section. Select branch, date, year, semester, subject, and section.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Branch</label>
+                    <Select value={selectedBranch || '__none__'} onValueChange={(v) => { if (v !== '__none__') { setSelectedBranch(v); setSelectedSubject(''); } }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select branch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {facultyBranchOptions.length === 0 ? (
+                          <SelectItem value="__none__" disabled className="text-muted-foreground">
+                            {facultyDeptCodes.length === 0 ? 'No branches allotted' : 'Loading…'}
+                          </SelectItem>
+                        ) : (
+                          facultyBranchOptions.map((d: { id: number; code: string; name: string }) => (
+                            <SelectItem key={d.id} value={d.code}>
+                              {d.code} – {d.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Date</label>
                     <Popover>

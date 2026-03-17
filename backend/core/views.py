@@ -231,6 +231,9 @@ def user_list_view(request):
         dept_list = [x.strip() for x in dept_str.split(',') if x.strip()]
         if dept_list:
             qs = qs.filter(department__in=dept_list)
+            department = request.query_params.get('department', '').strip()
+            if department and department in dept_list:
+                qs = qs.filter(department=department)
             section = request.query_params.get('section', '').strip()
             if section:
                 qs = qs.filter(section=section)
