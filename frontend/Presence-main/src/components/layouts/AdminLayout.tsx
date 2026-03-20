@@ -1242,8 +1242,8 @@ export const AdminLayout: React.FC = () => {
               <GraduationCap className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">Admin Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Welcome back, {user?.name}</p>
+              <h1 className="text-xl font-extrabold text-foreground">{user?.name || 'Admin'}</h1>
+              <p className="text-sm text-muted-foreground">Welcome back</p>
             </div>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">

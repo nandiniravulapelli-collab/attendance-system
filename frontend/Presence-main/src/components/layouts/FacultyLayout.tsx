@@ -442,8 +442,8 @@ export const FacultyLayout: React.FC = () => {
               <GraduationCap className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Faculty Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Welcome back, {user?.name}</p>
+              <h1 className="text-xl font-extrabold text-foreground">{user?.name || 'Faculty'}</h1>
+              <p className="text-sm text-muted-foreground">Welcome back</p>
             </div>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">

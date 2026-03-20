@@ -286,8 +286,8 @@ export const StudentLayout: React.FC = () => {
               <Users className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">Student Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Welcome back, {user?.name}</p>
+              <h1 className="text-xl font-extrabold text-foreground">{user?.name || 'Student'}</h1>
+              <p className="text-sm text-muted-foreground">Welcome back</p>
             </div>
           </div>
           <div className="w-full sm:w-auto">
