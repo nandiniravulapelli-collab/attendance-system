@@ -189,6 +189,7 @@ export const StudentLayout: React.FC = () => {
   } | null>(null);
   const [fromDate, setFromDate] = useState<Date | null>(null);
   const [toDate, setToDate] = useState<Date | null>(null);
+  const [showAllAttendanceOnDashboard, setShowAllAttendanceOnDashboard] = useState(false);
   useEffect(() => {
     if (numericId == null) return;
     const params = new URLSearchParams();
@@ -269,12 +270,15 @@ export const StudentLayout: React.FC = () => {
 
   const attendanceStatus = getAttendanceStatus();
 
-  const recentAttendance = apiAttendance?.records?.length
+  const completeAttendance = apiAttendance?.records?.length
     ? [...apiAttendance.records]
         .sort((a, b) => (b.date > a.date ? 1 : -1))
-        .slice(0, 10)
         .map(r => ({ subject: r.subject, date: r.date, status: r.status?.toLowerCase() || 'absent' }))
     : db.getRecentAttendance(user?.id || '');
+  const hasDateFilter = !!fromDate || !!toDate;
+  const attendanceToShowOnDashboard = hasDateFilter || showAllAttendanceOnDashboard
+    ? completeAttendance
+    : completeAttendance.slice(0, 10);
 
   return (
     <div className="min-h-screen bg-dashboard-bg">
@@ -489,15 +493,61 @@ export const StudentLayout: React.FC = () => {
               </Card>
             </div>
 
-            {/* Recent Attendance */}
+            {/* Complete Attendance */}
             <Card>
               <CardHeader>
-                <CardTitle>Recent Attendance</CardTitle>
-                <CardDescription>Your attendance for the last few classes</CardDescription>
+                <CardTitle>Complete Attendance</CardTitle>
+                <CardDescription>
+                  Full attendance list. Use date filters to view attendance between specific dates.
+                </CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="flex flex-wrap gap-4 items-end mb-4">
+                  <div className="space-y-1">
+                    <Label>From date</Label>
+                    <Input
+                      type="date"
+                      value={fromDate ? format(fromDate, 'yyyy-MM-dd') : ''}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setFromDate(v ? new Date(v) : null);
+                      }}
+                      className="w-40"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>To date</Label>
+                    <Input
+                      type="date"
+                      value={toDate ? format(toDate, 'yyyy-MM-dd') : ''}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setToDate(v ? new Date(v) : null);
+                      }}
+                      className="w-40"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFromDate(null);
+                      setToDate(null);
+                    }}
+                  >
+                    Clear dates
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAllAttendanceOnDashboard(prev => !prev)}
+                    disabled={hasDateFilter}
+                  >
+                    {showAllAttendanceOnDashboard ? 'Show less' : 'Show all'}
+                  </Button>
+                </div>
                 <div className="space-y-3">
-                  {recentAttendance.map((record, index) => (
+                  {attendanceToShowOnDashboard.map((record, index) => (
                     <div key={index} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div className="flex items-center space-x-3">
                         <div className="w-2 h-2 rounded-full bg-primary" />
