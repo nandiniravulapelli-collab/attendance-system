@@ -37,9 +37,9 @@ export const FacultyLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [selectedBranch, setSelectedBranch] = useState<string>('');
-  const [selectedSubject, setSelectedSubject] = useState<string>('');
-  const [selectedSection, setSelectedSection] = useState<string>('');
+  const [selectedBranches, setSelectedBranches] = useState<string[]>(['__all__']);
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [selectedYear, setSelectedYear] = useState<string>('__all__');
   const [selectedSemester, setSelectedSemester] = useState<string>('__all__');
   const [apiDepartments, setApiDepartments] = useState<Array<{ id: number; name: string; code: string }>>([]);
@@ -63,17 +63,20 @@ export const FacultyLayout: React.FC = () => {
     .map((d: string) => d.trim())
     .filter(Boolean);
 
-  // Subjects: from API, filtered by faculty's department(s) and selected branch
+  const selectedBranchCodes = selectedBranches.includes('__all__')
+    ? facultyDeptCodes
+    : selectedBranches;
+
+  // Subjects: from API, filtered by faculty's department(s) and selected branch(es)
   const subjectsAll = facultyDeptCodes.length > 0 && apiSubjects.length > 0
     ? apiSubjects.filter((s: { department_code?: string }) => facultyDeptCodes.includes(s.department_code ?? ''))
     : apiSubjects;
-  const subjectsByBranch = selectedBranch
-    ? subjectsAll.filter((s: { department_code?: string }) => s.department_code === selectedBranch)
+  const subjectsByBranch = selectedBranchCodes.length > 0
+    ? subjectsAll.filter((s: { department_code?: string }) => selectedBranchCodes.includes(s.department_code ?? ''))
     : subjectsAll;
   const subjects = selectedSemester && selectedSemester !== '__all__'
     ? subjectsByBranch.filter((s: { semester?: string }) => String(s.semester ?? '1') === selectedSemester)
     : subjectsByBranch;
-  const validSubjectValue = subjects.some(s => String(s.id) === selectedSubject) ? selectedSubject : '';
   const facultyBranchOptions = apiDepartments.filter((d: { code: string }) => facultyDeptCodes.includes(d.code));
 
   useEffect(() => {
@@ -98,10 +101,10 @@ export const FacultyLayout: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (facultyDeptCodes.length === 1 && !selectedBranch) {
-      setSelectedBranch(facultyDeptCodes[0]);
+    if (facultyDeptCodes.length === 1 && (selectedBranches.length === 0 || selectedBranches.includes('__all__'))) {
+      setSelectedBranches([facultyDeptCodes[0]]);
     }
-  }, [facultyDeptCodes.length, selectedBranch]);
+  }, [facultyDeptCodes.length, selectedBranches.length]);
 
   useEffect(() => {
     if (facultyDeptCodes.length === 0) {
@@ -110,15 +113,14 @@ export const FacultyLayout: React.FC = () => {
     }
     setStudentsLoading(true);
     const params = new URLSearchParams({ role: 'student' });
-    if (selectedBranch) params.set('department', selectedBranch);
-    if (selectedSection) params.set('section', selectedSection);
+    if (selectedBranchCodes.length === 1) params.set('department', selectedBranchCodes[0]);
     if (selectedYear && selectedYear !== '__all__') params.set('year', selectedYear);
     fetch(apiUrl(`/api/users/?${params}`), { credentials: 'include' })
       .then(res => res.ok ? res.json() : [])
       .then((data: unknown) => setApiStudents(Array.isArray(data) ? data : []))
       .catch(() => setApiStudents([]))
       .finally(() => setStudentsLoading(false));
-  }, [facultyDeptCodes.length, selectedBranch, selectedSection, selectedYear]);
+  }, [facultyDeptCodes.length, selectedBranchCodes.join(','), selectedYear]);
 
   useEffect(() => {
     if (user?.role !== 'faculty' && user?.role !== 'admin') return;
@@ -128,16 +130,18 @@ export const FacultyLayout: React.FC = () => {
       .catch(() => setAttendanceRecords([]));
   }, [user?.role, activeTab]);
 
-  const studentsInSection = apiStudents.map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, departmentId: s.department || '', section: s.section || '', year: s.year ? Number(s.year) : 0 }))
-    .filter(s => selectedSection === '' || s.section === selectedSection);
+  const studentsInSection = apiStudents
+    .map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, departmentId: s.department || '', section: s.section || '', year: s.year ? Number(s.year) : 0 }))
+    .filter(s => (selectedBranchCodes.length === 0 || selectedBranchCodes.includes(s.departmentId)))
+    .filter(s => selectedSections.length === 0 || selectedSections.includes(s.section));
 
-  // Pre-fill attendance checkboxes from saved records when date/subject/section change
-  const selectedSubj = subjects.find(s => String(s.id) === selectedSubject) as { code?: string; name?: string } | undefined;
-  const subjectCodeForMatch = selectedSubj?.code ?? selectedSubject;
-  const subjectNameForMatch = selectedSubj?.name ?? '';
+  // Pre-fill attendance checkboxes when one subject is selected.
+  const selectedSubjectObjs = subjects.filter(s => selectedSubjects.includes(String(s.id)));
+  const selectedSubjectCodes = selectedSubjectObjs.map(s => (s.code ?? '').trim().toLowerCase()).filter(Boolean);
+  const selectedSubjectNames = selectedSubjectObjs.map(s => (s.name ?? '').trim().toLowerCase()).filter(Boolean);
   const studentsInSectionKey = studentsInSection.map(s => s.id).join(',');
   useEffect(() => {
-    if (!selectedSubject || !selectedSection) {
+    if (selectedSubjects.length !== 1 || selectedSections.length === 0) {
       setAttendanceData({});
       return;
     }
@@ -147,7 +151,7 @@ export const FacultyLayout: React.FC = () => {
     const subjectMatches = (s: string) => {
       if (!s) return false;
       const t = s.trim().toLowerCase();
-      return t === (subjectCodeForMatch ?? '').trim().toLowerCase() || (subjectNameForMatch && t === subjectNameForMatch.trim().toLowerCase());
+      return selectedSubjectCodes.includes(t) || selectedSubjectNames.includes(t);
     };
     studentsInSection.forEach(student => {
       const record = attendanceRecords.find(
@@ -164,7 +168,7 @@ export const FacultyLayout: React.FC = () => {
     });
     setAttendanceData(initial);
     if (sessionTotal !== sessionTotalHours && sessionTotal >= 1) setSessionTotalHours(sessionTotal);
-  }, [selectedDate, selectedSubject, selectedSection, subjectCodeForMatch, subjectNameForMatch, attendanceRecords, studentsInSectionKey]);
+  }, [selectedDate, selectedSubjects.join(','), selectedSections.join(','), selectedSubjectCodes.join(','), selectedSubjectNames.join(','), attendanceRecords, studentsInSectionKey]);
 
   const handleAttendanceChange = (studentId: string, isPresent: boolean) => {
     setAttendanceData(prev => ({ ...prev, [studentId]: isPresent ? sessionTotalHours : 0 }));
@@ -174,16 +178,17 @@ export const FacultyLayout: React.FC = () => {
     setAttendanceData(prev => ({ ...prev, [studentId]: val }));
   };
 
-  const subjectCode = (subjects.find(s => String(s.id) === selectedSubject) as { code?: string } | undefined)?.code ?? selectedSubject;
-
   const handleSaveAttendance = async () => {
-    if (!selectedSubject || !selectedSection) {
-      toast({ title: 'Error', description: 'Please select subject and section', variant: 'destructive' });
+    if (selectedSubjects.length === 0 || selectedSections.length === 0) {
+      toast({ title: 'Error', description: 'Please select at least one subject and one section.', variant: 'destructive' });
       return;
     }
-    const codeToSend = (subjects.find(s => String(s.id) === selectedSubject) as { code?: string } | undefined)?.code;
-    if (!codeToSend) {
-      toast({ title: 'Error', description: 'Invalid subject. Please select a subject from the list.', variant: 'destructive' });
+    const codesToSend = subjects
+      .filter(s => selectedSubjects.includes(String(s.id)))
+      .map(s => s.code)
+      .filter(Boolean);
+    if (codesToSend.length === 0) {
+      toast({ title: 'Error', description: 'Invalid subject selection.', variant: 'destructive' });
       return;
     }
     if (studentsInSection.length === 0) {
@@ -191,17 +196,19 @@ export const FacultyLayout: React.FC = () => {
       return;
     }
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
-    const payload = studentsInSection.map(student => {
-      const hours = attendanceData[student.id] ?? 0;
-      return {
-        student: Number(student.id),
-        subject: codeToSend,
-        date: dateStr,
-        status: hours > 0 ? 'present' : 'absent',
-        hours,
-        total_hours: sessionTotalHours,
-      };
-    });
+    const payload = codesToSend.flatMap(codeToSend =>
+      studentsInSection.map(student => {
+        const hours = attendanceData[student.id] ?? 0;
+        return {
+          student: Number(student.id),
+          subject: codeToSend,
+          date: dateStr,
+          status: hours > 0 ? 'present' : 'absent',
+          hours,
+          total_hours: sessionTotalHours,
+        };
+      })
+    );
     try {
       const res = await fetch(apiUrl('/api/attendance/'), {
         method: 'POST',
@@ -480,24 +487,55 @@ export const FacultyLayout: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Branch</label>
-                    <Select value={selectedBranch || '__none__'} onValueChange={(v) => { if (v !== '__none__') { setSelectedBranch(v); setSelectedSubject(''); } }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {facultyBranchOptions.length === 0 ? (
-                          <SelectItem value="__none__" disabled className="text-muted-foreground">
-                            {facultyDeptCodes.length === 0 ? 'No branches allotted' : 'Loading…'}
-                          </SelectItem>
-                        ) : (
-                          facultyBranchOptions.map((d: { id: number; code: string; name: string }) => (
-                            <SelectItem key={d.id} value={d.code}>
-                              {d.code} – {d.name}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {selectedBranches.includes('__all__')
+                            ? 'All branches'
+                            : selectedBranches.length > 0
+                              ? `${selectedBranches.length} selected`
+                              : 'Select branch(es)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3">
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="branch-all"
+                              checked={selectedBranches.includes('__all__')}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedBranches(['__all__']);
+                                } else {
+                                  setSelectedBranches([]);
+                                }
+                                setSelectedSubjects([]);
+                              }}
+                            />
+                            <label htmlFor="branch-all" className="text-sm font-medium cursor-pointer">All branches</label>
+                          </div>
+                          {facultyBranchOptions.map((d: { id: number; code: string; name: string }) => (
+                            <div key={d.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`branch-${d.id}`}
+                                checked={selectedBranches.includes('__all__') || selectedBranches.includes(d.code)}
+                                onCheckedChange={(checked) => {
+                                  const current = selectedBranches.includes('__all__') ? [] : selectedBranches;
+                                  const next = checked
+                                    ? [...current, d.code]
+                                    : current.filter((v) => v !== d.code);
+                                  setSelectedBranches(next);
+                                  setSelectedSubjects([]);
+                                }}
+                              />
+                              <label htmlFor={`branch-${d.id}`} className="text-sm cursor-pointer">
+                                {d.code} – {d.name}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Date</label>
@@ -558,41 +596,77 @@ export const FacultyLayout: React.FC = () => {
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Subject</label>
-                    <Select value={validSubjectValue} onValueChange={(v) => v !== '__none__' && setSelectedSubject(v)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select subject" />
-                      </SelectTrigger>
-                      <SelectContent>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {selectedSubjects.length > 0 ? `${selectedSubjects.length} selected` : 'Select subject(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-3 max-h-72 overflow-y-auto">
                         {subjects.length === 0 ? (
-                          <SelectItem key="__none__" value="__none__" disabled className="text-muted-foreground">
-                            {facultyDeptCodes.length === 0 ? 'No departments assigned / log in again' : 'No subjects for your department(s) — add in Admin → Subjects'}
-                          </SelectItem>
+                          <p className="text-sm text-muted-foreground">
+                            {facultyDeptCodes.length === 0 ? 'No departments assigned / log in again' : 'No subjects for selected branch(es).'}
+                          </p>
                         ) : (
-                          subjects.map((subject: { id: string | number; name: string; code: string }) => (
-                            <SelectItem key={String(subject.id)} value={String(subject.id)}>
-                              {subject.name} ({subject.code})
-                            </SelectItem>
-                          ))
+                          <div className="space-y-2">
+                            {subjects.map((subject: { id: string | number; name: string; code: string }) => {
+                              const id = String(subject.id);
+                              return (
+                                <div key={id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`subject-${id}`}
+                                    checked={selectedSubjects.includes(id)}
+                                    onCheckedChange={(checked) => {
+                                      const next = checked
+                                        ? [...selectedSubjects, id]
+                                        : selectedSubjects.filter((v) => v !== id);
+                                      setSelectedSubjects(next);
+                                    }}
+                                  />
+                                  <label htmlFor={`subject-${id}`} className="text-sm cursor-pointer">
+                                    {subject.name} ({subject.code})
+                                  </label>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
-                      </SelectContent>
-                    </Select>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Section</label>
-                    <Select value={selectedSection} onValueChange={setSelectedSection}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select section" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(apiSections || []).map((s: { id: number; name: string }) => (
-                          <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                        ))}
-                        {(apiSections || []).length === 0 && (
-                          <SelectItem value="__none__" disabled className="text-muted-foreground">No sections – add in Admin</SelectItem>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {selectedSections.length > 0 ? `${selectedSections.length} selected` : 'Select section(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3">
+                        {(apiSections || []).length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No sections – add in Admin</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {(apiSections || []).map((s: { id: number; name: string }) => (
+                              <div key={s.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`section-${s.id}`}
+                                  checked={selectedSections.includes(s.name)}
+                                  onCheckedChange={(checked) => {
+                                    const next = checked
+                                      ? [...selectedSections, s.name]
+                                      : selectedSections.filter((v) => v !== s.name);
+                                    setSelectedSections(next);
+                                  }}
+                                />
+                                <label htmlFor={`section-${s.id}`} className="text-sm cursor-pointer">{s.name}</label>
+                              </div>
+                            ))}
+                          </div>
                         )}
-                      </SelectContent>
-                    </Select>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <div className="space-y-2">
@@ -663,13 +737,13 @@ export const FacultyLayout: React.FC = () => {
             </Card>
 
             {/* Student List */}
-            {selectedSubject && selectedSection && (
+            {selectedSubjects.length > 0 && selectedSections.length > 0 && (
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Students in Section {selectedSection}</CardTitle>
+                    <CardTitle>Students in Sections: {selectedSections.join(', ')}</CardTitle>
                     <CardDescription>
-                      {subjects.find(s => s.id === selectedSubject)?.name} - {format(selectedDate, 'PPP')} · {sessionTotalHours} hour(s)
+                      {selectedSubjectObjs.map(s => s.name).join(', ')} - {format(selectedDate, 'PPP')} · {sessionTotalHours} hour(s)
                     </CardDescription>
                   </div>
                   <Button onClick={handleSaveAttendance} disabled={studentsInSection.length === 0}>
