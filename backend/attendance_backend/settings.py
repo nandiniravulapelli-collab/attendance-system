@@ -7,7 +7,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Deployment: set these in environment (or .env) for production/college use
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "demo-secret-key-change-in-production")
 DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
-ALLOWED_HOSTS = ["*"]
+_allowed_hosts_env = os.environ.get("DJANGO_ALLOWED_HOSTS", "").strip()
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()] or ["*"]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -48,12 +49,16 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# For college deployment: set CORS_ALLOWED_ORIGINS to your frontend URL(s), e.g. "https://attendance.college.edu"
-CORS_ALLOWED_ORIGINS = [
+# For college deployment: set CORS_ALLOWED_ORIGINS to your frontend URL(s), comma-separated.
+_default_cors_origins = [
     "https://attendance-system-2-77c2.onrender.com",
 ]
+_cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+_cors_from_env = [o.strip() for o in _cors_env.split(",") if o.strip()]
+CORS_ALLOWED_ORIGINS = sorted(set(_default_cors_origins + _cors_from_env))
 
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [o for o in CORS_ALLOWED_ORIGINS if o.startswith("http://") or o.startswith("https://")]
 
 ROOT_URLCONF = 'attendance_backend.urls'
 
@@ -80,6 +85,11 @@ SESSION_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
+_cookie_domain = os.environ.get("SESSION_COOKIE_DOMAIN", "").strip()
+if _cookie_domain:
+    # Optional for college deployments using subdomains, e.g. .college.edu
+    SESSION_COOKIE_DOMAIN = _cookie_domain
+    CSRF_COOKIE_DOMAIN = _cookie_domain
 
 SESSION_COOKIE_AGE = 86400 * 7
 SESSION_SAVE_EVERY_REQUEST = True

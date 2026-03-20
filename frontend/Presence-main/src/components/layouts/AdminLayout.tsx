@@ -178,7 +178,7 @@ export const AdminLayout: React.FC = () => {
           setApiStudents(Array.isArray(data) ? data : (data.results ?? []));
         } else if (res.status === 403) {
           setApiStudents([]);
-          setStudentsError('Could not load students. Make sure you are logged in as Admin and that you use the same address for app and backend (e.g. both http://localhost or both http://127.0.0.1).');
+          setStudentsError('Could not load students. Make sure you are logged in as Admin and that your deployed frontend origin is allowed by backend CORS settings.');
         } else {
           setApiStudents([]);
           setStudentsError('Could not load students. Please try again.');
