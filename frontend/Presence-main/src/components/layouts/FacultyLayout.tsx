@@ -603,6 +603,13 @@ export const FacultyLayout: React.FC = () => {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-80 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setSelectedSubjects(subjects.map(s => String(s.id)))}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setSelectedSubjects([])}>Clear all</Button>
+                          </div>
+                        </div>
                         {subjects.length === 0 ? (
                           <p className="text-sm text-muted-foreground">
                             {facultyDeptCodes.length === 0 ? 'No departments assigned / log in again' : 'No subjects for selected branch(es).'}
@@ -644,6 +651,13 @@ export const FacultyLayout: React.FC = () => {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-64 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setSelectedSections((apiSections || []).map(s => s.name))}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setSelectedSections([])}>Clear all</Button>
+                          </div>
+                        </div>
                         {(apiSections || []).length === 0 ? (
                           <p className="text-sm text-muted-foreground">No sections – add in Admin</p>
                         ) : (

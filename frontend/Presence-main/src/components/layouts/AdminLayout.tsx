@@ -696,12 +696,12 @@ export const AdminLayout: React.FC = () => {
   const pieData = dashboardDistributionPie;
 
   // Mark Attendance (admin - same as faculty)
-  const [attDept, setAttDept] = useState<string>('__all__');
+  const [attDepts, setAttDepts] = useState<string[]>(['__all__']);
   const [attDate, setAttDate] = useState<Date>(new Date());
   const [attYear, setAttYear] = useState<string>('__all__');
   const [attSemester, setAttSemester] = useState<string>('__all__');
-  const [attSubject, setAttSubject] = useState<string>('');
-  const [attSection, setAttSection] = useState<string>('');
+  const [attSubjects, setAttSubjects] = useState<string[]>([]);
+  const [attSections, setAttSections] = useState<string[]>([]);
   const [attData, setAttData] = useState<Record<string, number>>({});
   const [attStudents, setAttStudents] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; email: string; department: string | null; section: string | null; year: string | null }>>([]);
   const [attRecords, setAttRecords] = useState<Array<{ student: number; subject: string; date: string; status: string; hours?: number | null; total_hours?: number | null }>>([]);
@@ -731,41 +731,48 @@ export const AdminLayout: React.FC = () => {
     });
   }, [activeTab, attReportFromDate, attReportToDate]);
 
+  const selectedAttDeptCodes = attDepts.includes('__all__')
+    ? (apiDepartments || []).map((d: { code: string }) => d.code)
+    : attDepts;
+
   useEffect(() => {
-    if (activeTab !== 'mark-attendance' || !attDept || attDept === '__all__') {
+    if (activeTab !== 'mark-attendance') return;
+    if (selectedAttDeptCodes.length === 0) {
       setAttStudents([]);
       return;
     }
     setAttStudentsLoading(true);
-    const params = new URLSearchParams({ role: 'student', department: attDept });
-    if (attSection) params.set('section', attSection);
+    const params = new URLSearchParams({ role: 'student' });
+    if (selectedAttDeptCodes.length === 1) params.set('department', selectedAttDeptCodes[0]);
     if (attYear && attYear !== '__all__') params.set('year', attYear);
     fetch(apiUrl(`/api/users/?${params}`), { credentials: 'include' })
       .then(res => res.ok ? res.json() : [])
       .then((data: unknown) => setAttStudents(Array.isArray(data) ? data : []))
       .catch(() => setAttStudents([]))
       .finally(() => setAttStudentsLoading(false));
-  }, [activeTab, attDept, attSection, attYear]);
+  }, [activeTab, selectedAttDeptCodes.join(','), attYear]);
 
-  const attSubjectsFiltered = (apiSubjects || []).filter((s: { department_code?: string }) => !attDept || attDept === '__all__' || s.department_code === attDept);
+  const attSubjectsFiltered = (apiSubjects || []).filter((s: { department_code?: string }) => selectedAttDeptCodes.length === 0 || selectedAttDeptCodes.includes(s.department_code ?? ''));
   const attSubjectsSem = attSemester && attSemester !== '__all__'
     ? attSubjectsFiltered.filter((s: { semester?: string }) => String(s.semester ?? '1') === attSemester)
     : attSubjectsFiltered;
   const attStudentsInSection = attStudents
     .map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, section: s.section || '' }))
-    .filter(s => !attSection || s.section === attSection);
-  const attSubjectCode = (attSubjectsSem.find((s: { id: number }) => String(s.id) === attSubject) as { code?: string } | undefined)?.code ?? attSubject;
-  const attSubjectName = (attSubjectsSem.find((s: { id: number }) => String(s.id) === attSubject) as { name?: string } | undefined)?.name ?? '';
+    .filter(s => attSections.length === 0 || attSections.includes(s.section))
+    .filter(s => selectedAttDeptCodes.length === 0 || selectedAttDeptCodes.includes((attStudents.find(x => String(x.id) === s.id)?.department ?? '')));
+  const selectedAttSubjectObjs = attSubjectsSem.filter((s: { id: number }) => attSubjects.includes(String(s.id)));
+  const attSubjectCodes = selectedAttSubjectObjs.map((s: { code?: string }) => (s.code ?? '').trim().toLowerCase()).filter(Boolean);
+  const attSubjectNames = selectedAttSubjectObjs.map((s: { name?: string }) => (s.name ?? '').trim().toLowerCase()).filter(Boolean);
 
   useEffect(() => {
-    if (!attSubject || !attSection) {
+    if (attSubjects.length !== 1 || attSections.length === 0) {
       setAttData({});
       return;
     }
     const dateStr = format(attDate, 'yyyy-MM-dd');
     const subjectMatches = (s: string) => {
       const t = (s || '').trim().toLowerCase();
-      return t === (attSubjectCode ?? '').trim().toLowerCase() || (attSubjectName && t === attSubjectName.trim().toLowerCase());
+      return attSubjectCodes.includes(t) || attSubjectNames.includes(t);
     };
     const initial: Record<string, number> = {};
     let sessionTotal = attSessionTotalHours;
@@ -784,7 +791,7 @@ export const AdminLayout: React.FC = () => {
     });
     setAttData(initial);
     if (sessionTotal !== attSessionTotalHours && sessionTotal >= 1) setAttSessionTotalHours(sessionTotal);
-  }, [attDate, attSubject, attSection, attSubjectCode, attSubjectName, attRecords, attStudentsInSection.map(s => s.id).join(',')]);
+  }, [attDate, attSubjects.join(','), attSections.join(','), attSubjectCodes.join(','), attSubjectNames.join(','), attRecords, attStudentsInSection.map(s => s.id).join(',')]);
 
   const handleAttChange = (studentId: string, isPresent: boolean) => {
     setAttData(prev => ({ ...prev, [studentId]: isPresent ? attSessionTotalHours : 0 }));
@@ -800,8 +807,16 @@ export const AdminLayout: React.FC = () => {
     setAttData(next);
   };
   const handleAttSave = async () => {
-    if (!attSubject || !attSection || !attSubjectCode) {
-      toast({ title: 'Error', description: 'Select subject and section', variant: 'destructive' });
+    if (attSubjects.length === 0 || attSections.length === 0) {
+      toast({ title: 'Error', description: 'Select at least one subject and one section', variant: 'destructive' });
+      return;
+    }
+    const codesToSend = attSubjectsSem
+      .filter((s: { id: number; code: string }) => attSubjects.includes(String(s.id)))
+      .map((s: { code: string }) => s.code)
+      .filter(Boolean);
+    if (codesToSend.length === 0) {
+      toast({ title: 'Error', description: 'Invalid subject selection', variant: 'destructive' });
       return;
     }
     if (attStudentsInSection.length === 0) {
@@ -809,17 +824,19 @@ export const AdminLayout: React.FC = () => {
       return;
     }
     const dateStr = format(attDate, 'yyyy-MM-dd');
-    const payload = attStudentsInSection.map(s => {
-      const hours = attData[s.id] ?? 0;
-      return {
-        student: Number(s.id),
-        subject: attSubjectCode,
-        date: dateStr,
-        status: hours > 0 ? 'present' : 'absent',
-        hours,
-        total_hours: attSessionTotalHours
-      };
-    });
+    const payload = codesToSend.flatMap((codeToSend: string) =>
+      attStudentsInSection.map(s => {
+        const hours = attData[s.id] ?? 0;
+        return {
+          student: Number(s.id),
+          subject: codeToSend,
+          date: dateStr,
+          status: hours > 0 ? 'present' : 'absent',
+          hours,
+          total_hours: attSessionTotalHours
+        };
+      })
+    );
     try {
       const res = await fetch(apiUrl('/api/attendance/'), {
         method: 'POST',
@@ -2239,21 +2256,47 @@ export const AdminLayout: React.FC = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Mark Attendance</CardTitle>
-                <CardDescription>Select department, date, year, semester, subject, and section. Then mark students present/absent.</CardDescription>
+                <CardDescription>Select branch(es), date, year, semester, subject(s), and section(s). Then mark students present/absent.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Department</label>
-                    <Select value={attDept || '__all__'} onValueChange={(v) => setAttDept(v || '__all__')}>
-                      <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">Select department</SelectItem>
+                    <label className="text-sm font-medium">Branch</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {attDepts.includes('__all__') ? 'All branches' : attDepts.length > 0 ? `${attDepts.length} selected` : 'Select branch(es)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setAttDepts(['__all__']); setAttSubjects([]); }}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setAttDepts([]); setAttSubjects([]); }}>Clear all</Button>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Checkbox id="att-branch-all" checked={attDepts.includes('__all__')} onCheckedChange={(c) => { if (c) { setAttDepts(['__all__']); } else { setAttDepts([]); } setAttSubjects([]); }} />
+                          <label htmlFor="att-branch-all" className="text-sm font-medium cursor-pointer">All branches</label>
+                        </div>
                         {(apiDepartments || []).map((d: { id: number; code: string; name: string }) => (
-                          <SelectItem key={d.id} value={d.code}>{d.code} – {d.name}</SelectItem>
+                          <div key={d.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`att-branch-${d.id}`}
+                              checked={attDepts.includes('__all__') || attDepts.includes(d.code)}
+                              onCheckedChange={(checked) => {
+                                const current = attDepts.includes('__all__') ? [] : attDepts;
+                                const next = checked ? [...current, d.code] : current.filter(v => v !== d.code);
+                                setAttDepts(next);
+                                setAttSubjects([]);
+                              }}
+                            />
+                            <label htmlFor={`att-branch-${d.id}`} className="text-sm cursor-pointer">{d.code} – {d.name}</label>
+                          </div>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Date</label>
@@ -2295,31 +2338,80 @@ export const AdminLayout: React.FC = () => {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Subject</label>
-                    <Select value={attSubject || '__none__'} onValueChange={(v) => setAttSubject(v === '__none__' ? '' : (v || ''))}>
-                      <SelectTrigger><SelectValue placeholder="Subject" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__" disabled className="text-muted-foreground">
-                          {attDept === '__all__' ? 'Select department first' : (attSubjectsSem || []).length === 0 ? 'No subjects' : 'Select subject'}
-                        </SelectItem>
-                        {(attSubjectsSem || []).map((s: { id: number; name: string; code: string }) => (
-                          <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.code})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {attSubjects.length > 0 ? `${attSubjects.length} selected` : 'Select subject(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttSubjects((attSubjectsSem || []).map((s: { id: number }) => String(s.id)))}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttSubjects([])}>Clear all</Button>
+                          </div>
+                        </div>
+                        {(attSubjectsSem || []).length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No subjects for selected branch(es).</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {(attSubjectsSem || []).map((s: { id: number; name: string; code: string }) => (
+                              <div key={s.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`att-subj-${s.id}`}
+                                  checked={attSubjects.includes(String(s.id))}
+                                  onCheckedChange={(checked) => {
+                                    const id = String(s.id);
+                                    const next = checked ? [...attSubjects, id] : attSubjects.filter(v => v !== id);
+                                    setAttSubjects(next);
+                                  }}
+                                />
+                                <label htmlFor={`att-subj-${s.id}`} className="text-sm cursor-pointer">{s.name} ({s.code})</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Section</label>
-                    <Select value={attSection} onValueChange={setAttSection}>
-                      <SelectTrigger><SelectValue placeholder="Section" /></SelectTrigger>
-                      <SelectContent>
-                        {(apiSections || []).map((s: { id: number; name: string }) => (
-                          <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                        ))}
-                        {(apiSections || []).length === 0 && (
-                          <SelectItem value="__none__" disabled className="text-muted-foreground">Add sections in Sections tab</SelectItem>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {attSections.length > 0 ? `${attSections.length} selected` : 'Select section(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttSections((apiSections || []).map(s => s.name))}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttSections([])}>Clear all</Button>
+                          </div>
+                        </div>
+                        {(apiSections || []).length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Add sections in Sections tab</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {(apiSections || []).map((s: { id: number; name: string }) => (
+                              <div key={s.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`att-sec-${s.id}`}
+                                  checked={attSections.includes(s.name)}
+                                  onCheckedChange={(checked) => {
+                                    const next = checked ? [...attSections, s.name] : attSections.filter(v => v !== s.name);
+                                    setAttSections(next);
+                                  }}
+                                />
+                                <label htmlFor={`att-sec-${s.id}`} className="text-sm cursor-pointer">{s.name}</label>
+                              </div>
+                            ))}
+                          </div>
                         )}
-                      </SelectContent>
-                    </Select>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-4 items-end mb-4">
@@ -2354,12 +2446,12 @@ export const AdminLayout: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
-            {attSubject && attSection && (
+            {attSubjects.length > 0 && attSections.length > 0 && (
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Students in Section {attSection}</CardTitle>
-                    <CardDescription>{attSubjectsSem.find((s: { id: number }) => String(s.id) === attSubject)?.name} – {format(attDate, 'PPP')} · {attSessionTotalHours} hour(s)</CardDescription>
+                    <CardTitle>Students in Sections: {attSections.join(', ')}</CardTitle>
+                    <CardDescription>{selectedAttSubjectObjs.map((s: { name: string }) => s.name).join(', ')} – {format(attDate, 'PPP')} · {attSessionTotalHours} hour(s)</CardDescription>
                   </div>
                   <Button onClick={handleAttSave} disabled={attStudentsInSection.length === 0}>
                     <Save className="w-4 h-4 mr-2" /> Save Attendance
@@ -2369,7 +2461,7 @@ export const AdminLayout: React.FC = () => {
                   {attStudentsLoading ? (
                     <p className="text-muted-foreground">Loading students…</p>
                   ) : attStudentsInSection.length === 0 ? (
-                    <p className="text-muted-foreground">No students in this section. Select department and section.</p>
+                    <p className="text-muted-foreground">No students in selected filters. Select branch/section and verify students exist.</p>
                   ) : (
                     <div className="grid gap-2">
                       {attStudentsInSection.map((student, idx) => {
