@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,7 +44,8 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Lock
+  Lock,
+  Search
 } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -110,7 +111,28 @@ export const AdminLayout: React.FC = () => {
   const [studentFilterDept, setStudentFilterDept] = useState<string>('__all__');
   const [studentFilterSection, setStudentFilterSection] = useState('');
   const [studentFilterYear, setStudentFilterYear] = useState('');
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [deleteAllStudentsOpen, setDeleteAllStudentsOpen] = useState(false);
+  const [deleteAllStudentsLoading, setDeleteAllStudentsLoading] = useState(false);
   const [addStudentOpen, setAddStudentOpen] = useState(false);
+
+  const displayedStudents = useMemo(() => {
+    const list = Array.isArray(apiStudents) ? apiStudents : [];
+    const q = studentSearchQuery.trim().toLowerCase();
+    return list.filter((s) => {
+      if (studentFilterDept && studentFilterDept !== '__all__' && s.department !== studentFilterDept) return false;
+      if (studentFilterSection.trim() && !studentMatchesAnySection(s, [studentFilterSection.trim()])) return false;
+      if (studentFilterYear.trim() && s.year !== studentFilterYear.trim()) return false;
+      if (q) {
+        const name = (s.full_name || '').toLowerCase();
+        const roll = (s.roll_number || '').toLowerCase();
+        const user = (s.username || '').toLowerCase();
+        if (!name.includes(q) && !roll.includes(q) && !user.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [apiStudents, studentFilterDept, studentFilterSection, studentFilterYear, studentSearchQuery]);
+
   const [addStudentForm, setAddStudentForm] = useState({
     full_name: '',
     roll_number: '',
@@ -364,6 +386,43 @@ export const AdminLayout: React.FC = () => {
     } catch {
       toast({ title: 'Delete failed', description: 'Network error.', variant: 'destructive' });
     }
+  };
+
+  const openDeleteAllStudentsDialog = () => {
+    if (displayedStudents.length === 0) {
+      toast({ title: 'No students', description: 'No students match the current filters or search.', variant: 'destructive' });
+      return;
+    }
+    setDeleteAllStudentsOpen(true);
+  };
+
+  const confirmDeleteAllDisplayedStudents = async () => {
+    const ids = displayedStudents.map((s) => s.id);
+    if (ids.length === 0) {
+      setDeleteAllStudentsOpen(false);
+      return;
+    }
+    setDeleteAllStudentsLoading(true);
+    let ok = 0;
+    let fail = 0;
+    for (const id of ids) {
+      try {
+        const res = await fetch(apiUrl(`/api/users/${id}/`), { method: 'DELETE', credentials: 'include' });
+        if (res.ok) ok += 1;
+        else fail += 1;
+      } catch {
+        fail += 1;
+      }
+    }
+    const idSet = new Set(ids);
+    setApiStudents((prev) => prev.filter((s) => !idSet.has(s.id)));
+    setDeleteAllStudentsLoading(false);
+    setDeleteAllStudentsOpen(false);
+    toast({
+      title: 'Bulk delete finished',
+      description: fail ? `Removed ${ok} student(s). ${fail} could not be deleted.` : `Removed ${ok} student(s).`,
+      variant: fail ? 'destructive' : 'default',
+    });
   };
 
   const handleAddBranch = () => {
@@ -1477,73 +1536,90 @@ export const AdminLayout: React.FC = () => {
                     onChange={e => setStudentFilterYear(e.target.value)}
                   />
                 </div>
+                <div className="flex flex-wrap gap-3 items-center">
+                  <div className="relative flex-1 min-w-[220px] max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      className="pl-9 rounded-xl"
+                      placeholder="Search by name or roll number…"
+                      value={studentSearchQuery}
+                      onChange={(e) => setStudentSearchQuery(e.target.value)}
+                      aria-label="Search students by name or roll number"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="rounded-xl"
+                    disabled={studentsLoading || !!studentsError || displayedStudents.length === 0}
+                    onClick={openDeleteAllStudentsDialog}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete all shown ({displayedStudents.length})
+                  </Button>
+                </div>
                 {studentsLoading ? (
                   <p className="text-muted-foreground">Loading students…</p>
                 ) : studentsError ? (
                   <p className="text-destructive">{studentsError}</p>
-                ) : (() => {
-                  const list = Array.isArray(apiStudents) ? apiStudents : [];
-                  const filtered = list.filter(s => {
-                    if (studentFilterDept && studentFilterDept !== '__all__' && s.department !== studentFilterDept) return false;
-                    if (studentFilterSection.trim() && !studentMatchesAnySection(s, [studentFilterSection.trim()])) return false;
-                    if (studentFilterYear.trim() && s.year !== studentFilterYear.trim()) return false;
-                    return true;
-                  });
-                  return filtered.length === 0 ? (
-                    <p className="text-muted-foreground">No students match the filters. Add a student or import from Excel, or clear filters.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left p-2">Roll Number</th>
-                            <th className="text-left p-2">Name</th>
-                            <th className="text-left p-2">Email</th>
-                            <th className="text-left p-2">Department</th>
-                            <th className="text-left p-2">Section</th>
-                            <th className="text-left p-2">Year</th>
-                            <th className="text-left p-2">Password</th>
-                            <th className="text-left p-2">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filtered.map((student) => {
-                            const dept = apiDepartments.find(d => d.code === student.department);
-                            return (
-                              <tr key={student.id} className="border-b">
-                                <td className="p-2 font-mono text-sm">{student.roll_number || student.username}</td>
-                                <td className="p-2">{student.full_name || student.username}</td>
-                                <td className="p-2 text-sm text-muted-foreground">{student.email}</td>
-                                <td className="p-2">{dept?.code ?? student.department}</td>
-                                <td className="p-2">
-                                  <div className="flex flex-wrap gap-1">
-                                    {parseStudentSections(student).length === 0 ? (
-                                      <Badge variant="secondary">–</Badge>
-                                    ) : (
-                                      parseStudentSections(student).map((sec) => (
-                                        <Badge key={sec} variant="secondary">{sec}</Badge>
-                                      ))
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="p-2">{student.year || '–'}</td>
-                                <td className="p-2 font-mono text-sm">{student.visible_password ?? '—'}</td>
-                                <td className="p-2 flex gap-1">
-                                  <Button variant="outline" size="sm" onClick={() => handleOpenEditStudent(student)}>
-                                    <Edit className="w-3 h-3 mr-1 inline" /> Edit
-                                  </Button>
-                                  <Button variant="outline" size="sm" onClick={() => handleDeleteStudentClick(student.id)} className="text-destructive hover:text-destructive">
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  );
-                })()}
+                ) : displayedStudents.length === 0 ? (
+                  <p className="text-muted-foreground">
+                    {Array.isArray(apiStudents) && apiStudents.length === 0
+                      ? 'No students yet. Add a student or import from Excel.'
+                      : 'No students match the filters or search. Clear search or filters to see more.'}
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left p-2">Roll Number</th>
+                          <th className="text-left p-2">Name</th>
+                          <th className="text-left p-2">Email</th>
+                          <th className="text-left p-2">Department</th>
+                          <th className="text-left p-2">Section</th>
+                          <th className="text-left p-2">Year</th>
+                          <th className="text-left p-2">Password</th>
+                          <th className="text-left p-2">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayedStudents.map((student) => {
+                          const dept = apiDepartments.find(d => d.code === student.department);
+                          return (
+                            <tr key={student.id} className="border-b">
+                              <td className="p-2 font-mono text-sm">{student.roll_number || student.username}</td>
+                              <td className="p-2">{student.full_name || student.username}</td>
+                              <td className="p-2 text-sm text-muted-foreground">{student.email}</td>
+                              <td className="p-2">{dept?.code ?? student.department}</td>
+                              <td className="p-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {parseStudentSections(student).length === 0 ? (
+                                    <Badge variant="secondary">–</Badge>
+                                  ) : (
+                                    parseStudentSections(student).map((sec) => (
+                                      <Badge key={sec} variant="secondary">{sec}</Badge>
+                                    ))
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-2">{student.year || '–'}</td>
+                              <td className="p-2 font-mono text-sm">{student.visible_password ?? '—'}</td>
+                              <td className="p-2 flex gap-1">
+                                <Button variant="outline" size="sm" onClick={() => handleOpenEditStudent(student)}>
+                                  <Edit className="w-3 h-3 mr-1 inline" /> Edit
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => handleDeleteStudentClick(student.id)} className="text-destructive hover:text-destructive">
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
             {/* Add Student Dialog */}
@@ -1763,6 +1839,31 @@ export const AdminLayout: React.FC = () => {
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction onClick={confirmDeleteStudent} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={deleteAllStudentsOpen} onOpenChange={(open) => { if (!deleteAllStudentsLoading) setDeleteAllStudentsOpen(open); }}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete all students in this list?</AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-2">
+                    <span className="block">
+                      This will permanently remove <strong>{displayedStudents.length}</strong> student{displayedStudents.length === 1 ? '' : 's'} currently shown (after department, section, year filters and search). Each account and their attendance records will be deleted. This cannot be undone.
+                    </span>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleteAllStudentsLoading}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={deleteAllStudentsLoading}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      await confirmDeleteAllDisplayedStudents();
+                    }}
+                  >
+                    {deleteAllStudentsLoading ? 'Deleting…' : 'Delete all'}
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
