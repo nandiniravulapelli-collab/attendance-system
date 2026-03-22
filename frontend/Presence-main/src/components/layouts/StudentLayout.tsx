@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   PieChart,
   Pie,
@@ -38,6 +40,7 @@ import {
 import { db } from '@/lib/mockDb';
 import { toast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/api';
+import { formatStudentSectionsDisplay, parseStudentSections } from '@/lib/studentSections';
 import { format, parseISO } from 'date-fns';
 
 export const StudentLayout: React.FC = () => {
@@ -49,6 +52,7 @@ export const StudentLayout: React.FC = () => {
     phone: string | null;
     department: string | null;
     section: string | null;
+    sections?: string[];
     year: string | null;
     email: string;
   } | null>(null);
@@ -58,12 +62,13 @@ export const StudentLayout: React.FC = () => {
     roll_number: '',
     phone: '',
     department: '',
-    section: '',
+    sections: [] as string[],
     year: ''
   });
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [changePasswordForm, setChangePasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
   const [apiDepartments, setApiDepartments] = useState<Array<{ id: number; name: string; code: string }>>([]);
+  const [apiSections, setApiSections] = useState<Array<{ id: number; name: string }>>([]);
 
   const numericId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
   useEffect(() => {
@@ -85,13 +90,21 @@ export const StudentLayout: React.FC = () => {
       .then((data: unknown) => setApiDepartments(Array.isArray(data) ? data : []))
       .catch(() => setApiDepartments([]));
   };
+  const fetchSections = () => {
+    fetch(apiUrl('/api/sections/'), { credentials: 'include' })
+      .then(res => res.ok ? res.json() : [])
+      .then((data: unknown) => setApiSections(Array.isArray(data) ? data : []))
+      .catch(() => setApiSections([]));
+  };
   useEffect(() => {
     if (activeTab !== 'profile') return;
     fetchDepartments();
+    fetchSections();
   }, [activeTab]);
 
   const handleOpenEditProfile = async () => {
     if (apiDepartments.length === 0) fetchDepartments();
+    if (apiSections.length === 0) fetchSections();
     let profile = apiProfile;
     if (numericId != null && !profile) {
       try {
@@ -111,7 +124,7 @@ export const StudentLayout: React.FC = () => {
         roll_number: profile.roll_number || '',
         phone: profile.phone || '',
         department: profile.department || '',
-        section: profile.section || '',
+        sections: parseStudentSections(profile),
         year: profile.year || ''
       });
       setProfileEditOpen(true);
@@ -125,7 +138,14 @@ export const StudentLayout: React.FC = () => {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(profileEditForm)
+        body: JSON.stringify({
+          full_name: profileEditForm.full_name,
+          roll_number: profileEditForm.roll_number,
+          phone: profileEditForm.phone,
+          department: profileEditForm.department,
+          year: profileEditForm.year,
+          sections: profileEditForm.sections,
+        })
       });
       if (res.ok) {
         const updated = await res.json();
@@ -229,7 +249,7 @@ export const StudentLayout: React.FC = () => {
   const displayName = apiProfile?.full_name || user?.name || student?.name;
   const displayRoll = apiProfile?.roll_number || student?.rollNumber || user?.rollNumber;
   const displayPhone = apiProfile?.phone || student?.phone;
-  const displaySection = apiProfile?.section || student?.section;
+  const displaySectionRaw = apiProfile ? formatStudentSectionsDisplay(apiProfile).replace(/^–$/, '') : (student?.section ?? '');
   const displayYear = apiProfile?.year || (student?.year != null ? String(student.year) : undefined);
 
   const overallStats = studentAttendance.reduce(
@@ -723,8 +743,8 @@ export const StudentLayout: React.FC = () => {
                       <p className="text-lg font-medium">{department?.name ?? apiProfile?.department ?? '–'}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">Section</label>
-                      <p className="text-lg font-medium">{displaySection != null ? `Section ${displaySection}` : '–'}</p>
+                      <label className="text-sm font-medium text-muted-foreground">Section(s)</label>
+                      <p className="text-lg font-medium">{displaySectionRaw ? displaySectionRaw.split(',').map(s => s.trim()).filter(Boolean).join(', ') : '–'}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">Academic Year</label>
@@ -738,7 +758,7 @@ export const StudentLayout: React.FC = () => {
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Edit your details</DialogTitle>
-                  <DialogDescription>Update your name, roll number, phone, department, section, and year.</DialogDescription>
+                  <DialogDescription>Update your name, roll number, phone, department, section(s), and year.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
@@ -765,8 +785,43 @@ export const StudentLayout: React.FC = () => {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Section</Label>
-                    <Input value={profileEditForm.section} onChange={e => setProfileEditForm(f => ({ ...f, section: e.target.value }))} placeholder="e.g. A" />
+                    <Label>Section(s)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {profileEditForm.sections.length > 0 ? `${profileEditForm.sections.length} selected` : 'Select section(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3 max-h-64 overflow-y-auto" align="start">
+                        {apiSections.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No sections yet. Ask admin to add sections.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex justify-end gap-2 mb-2">
+                              <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => setProfileEditForm(f => ({ ...f, sections: apiSections.map(s => s.name) }))}>Select all</Button>
+                              <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => setProfileEditForm(f => ({ ...f, sections: [] }))}>Clear all</Button>
+                            </div>
+                            {apiSections.map((s) => (
+                              <div key={s.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`stu-sec-${s.id}`}
+                                  checked={profileEditForm.sections.includes(s.name)}
+                                  onCheckedChange={(checked) => {
+                                    setProfileEditForm(f => ({
+                                      ...f,
+                                      sections: checked
+                                        ? [...f.sections, s.name]
+                                        : f.sections.filter((x) => x !== s.name),
+                                    }));
+                                  }}
+                                />
+                                <label htmlFor={`stu-sec-${s.id}`} className="text-sm cursor-pointer">{s.name}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="grid gap-2">
                     <Label>Year</Label>

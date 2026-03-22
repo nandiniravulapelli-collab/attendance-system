@@ -6,19 +6,24 @@ from django.contrib.auth import get_user_model
 
 class RegisterSerializer(serializers.ModelSerializer):
     subjects = serializers.SerializerMethodField(read_only=True)
+    sections = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
         fields = (
             'id', 'username', 'email', 'password', 'role',
             'full_name', 'roll_number', 'phone',
-            'department', 'section', 'year',
+            'department', 'section', 'sections', 'year',
             'assigned_subject_ids', 'subjects'
         )
         extra_kwargs = {'password': {'write_only': True}, 'assigned_subject_ids': {'required': False}}
 
     def get_subjects(self, obj):
         s = (obj.assigned_subject_ids or '').strip()
+        return [x.strip() for x in s.split(',') if x.strip()] if s else []
+
+    def get_sections(self, obj):
+        s = (obj.section or '').strip()
         return [x.strip() for x in s.split(',') if x.strip()] if s else []
 
     def create(self, validated_data):
@@ -65,13 +70,14 @@ class UserSerializer(serializers.ModelSerializer):
     """Read and update user (e.g. student details). No password exposure."""
     departments = serializers.SerializerMethodField(read_only=True)
     subjects = serializers.SerializerMethodField(read_only=True)
+    sections = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
         fields = (
             'id', 'username', 'email', 'role',
             'full_name', 'roll_number', 'phone',
-            'department', 'departments', 'section', 'year',
+            'department', 'departments', 'section', 'sections', 'year',
             'assigned_subject_ids', 'subjects'
         )
         read_only_fields = ('id', 'username', 'email', 'role')
@@ -86,6 +92,10 @@ class UserSerializer(serializers.ModelSerializer):
         if not s:
             return []
         return [x.strip() for x in s.split(',') if x.strip()]
+
+    def get_sections(self, obj):
+        s = (obj.section or '').strip()
+        return [x.strip() for x in s.split(',') if x.strip()] if s else []
 
     def update(self, instance, validated_data):
         # Don't allow changing username/email/role via this serializer

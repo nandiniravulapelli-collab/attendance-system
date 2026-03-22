@@ -47,7 +47,11 @@ class User(AbstractUser):
     roll_number = models.CharField(max_length=50, blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
     department = models.CharField(max_length=100, blank=True, null=True)
-    section = models.CharField(max_length=50, blank=True, null=True)
+    # Comma-separated section names (e.g. "A,B") for students in multiple sections
+    section = models.CharField(
+        max_length=400, blank=True, null=True,
+        help_text='Comma-separated section names for students in multiple sections.',
+    )
     year = models.CharField(max_length=50, blank=True, null=True)
     # Stored only for admin visibility after password change (insecure; use with caution)
     visible_password = models.CharField(max_length=128, blank=True, null=True)

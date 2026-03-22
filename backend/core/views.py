@@ -5,6 +5,7 @@ from rest_framework import status
 from django.contrib.auth import login
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse
+from django.db.models import Q
 from openpyxl import load_workbook, Workbook
 import datetime
 import re
@@ -14,6 +15,35 @@ from .serializers import (
     RegisterSerializer, LoginSerializer, AttendanceSerializer, UserSerializer,
     DepartmentSerializer, SubjectSerializer, SectionSerializer,
 )
+
+
+def _sections_list_to_csv(secs) -> str:
+    """Turn a list/tuple (or single value) into comma-separated unique section names."""
+    if secs is None:
+        return ''
+    if isinstance(secs, (list, tuple)):
+        items = secs
+    else:
+        items = [secs]
+    seen = []
+    for x in items:
+        s = str(x).strip()
+        if s and s not in seen:
+            seen.append(s)
+    return ','.join(seen)
+
+
+def _q_user_section_token(section_name: str) -> Q:
+    """Match User.section when it stores comma-separated section names."""
+    n = (section_name or '').strip()
+    if not n:
+        return Q(pk__in=[])
+    return (
+        Q(section=n)
+        | Q(section__startswith=f'{n},')
+        | Q(section__endswith=f',{n}')
+        | Q(section__contains=f',{n},')
+    )
 
 
 @api_view(['POST'])
@@ -28,6 +58,9 @@ def register(request):
         subjs = data.get('subjects')
         data['assigned_subject_ids'] = ','.join(str(x) for x in (subjs if isinstance(subjs, (list, tuple)) else [])) if subjs else ''
         data.pop('subjects', None)
+    if 'sections' in data:
+        data['section'] = _sections_list_to_csv(data.get('sections'))
+        data.pop('sections', None)
     serializer = RegisterSerializer(data=data)
     if serializer.is_valid():
         serializer.save()
@@ -236,7 +269,7 @@ def user_list_view(request):
                 qs = qs.filter(department=department)
             section = request.query_params.get('section', '').strip()
             if section:
-                qs = qs.filter(section=section)
+                qs = qs.filter(_q_user_section_token(section))
             year = request.query_params.get('year', '').strip()
             if year:
                 qs = qs.filter(year=year)
@@ -249,7 +282,7 @@ def user_list_view(request):
             qs = qs.filter(department=department)
         section = request.query_params.get('section', '').strip()
         if section:
-            qs = qs.filter(section=section)
+            qs = qs.filter(_q_user_section_token(section))
         year = request.query_params.get('year', '').strip()
         if year:
             qs = qs.filter(year=year)
@@ -335,6 +368,9 @@ def user_detail_view(request, pk):
             subjs = data.get('subjects')
             data['assigned_subject_ids'] = ','.join(str(x) for x in (subjs if isinstance(subjs, (list, tuple)) else [])) if subjs else ''
             data.pop('subjects', None)
+        if 'sections' in data:
+            data['section'] = _sections_list_to_csv(data.get('sections'))
+            data.pop('sections', None)
         serializer = UserSerializer(target, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -400,9 +436,10 @@ def department_detail_view(request, pk):
 def section_list_view(request):
     is_admin = request.user.role == 'admin' or request.user.is_superuser
     is_faculty = request.user.role == 'faculty'
+    is_student = request.user.role == 'student'
     if request.method == 'POST' and not is_admin:
         return Response({"detail": "Admin only."}, status=403)
-    if request.method == 'GET' and not is_admin and not is_faculty:
+    if request.method == 'GET' and not is_admin and not is_faculty and not is_student:
         return Response({"detail": "Not allowed."}, status=403)
     if request.method == 'GET':
         try:
@@ -570,7 +607,11 @@ def bulk_student_upload_view(request):
         roll_number = _get('roll_number')
         email = _get('email')
         department = _get('department')
-        section = _get('section')
+        section_cell = _get('section')
+        # Multiple sections: comma- or semicolon-separated (e.g. "A,B" or "A; B")
+        section = ','.join(
+            x.strip() for x in section_cell.replace(';', ',').split(',') if x.strip()
+        )
         year = _get('year')
 
         if not roll_number or not email:

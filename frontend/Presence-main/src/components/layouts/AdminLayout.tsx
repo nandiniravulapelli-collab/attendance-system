@@ -52,6 +52,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/api';
+import { formatStudentSectionsDisplay, parseStudentSections, studentMatchesAnySection } from '@/lib/studentSections';
 
 export const AdminLayout: React.FC = () => {
   const { user, logout } = useAuth();
@@ -87,6 +88,7 @@ export const AdminLayout: React.FC = () => {
     phone: string | null;
     department: string | null;
     section: string | null;
+    sections?: string[];
     year: string | null;
     visible_password?: string | null;
   }>>([]);
@@ -98,7 +100,7 @@ export const AdminLayout: React.FC = () => {
     roll_number: '',
     phone: '',
     department: '',
-    section: '',
+    sections: [] as string[],
     year: '',
     new_password: ''
   });
@@ -115,7 +117,7 @@ export const AdminLayout: React.FC = () => {
     email: '',
     password: '',
     department: '',
-    section: '',
+    sections: [] as string[],
     year: '1',
     phone: ''
   });
@@ -266,7 +268,7 @@ export const AdminLayout: React.FC = () => {
       roll_number: s.roll_number || '',
       phone: s.phone || '',
       department: s.department || '',
-      section: s.section || '',
+      sections: parseStudentSections(s),
       year: s.year || '',
       new_password: ''
     });
@@ -275,8 +277,8 @@ export const AdminLayout: React.FC = () => {
 
   const handleSaveEditStudent = async () => {
     if (studentEditId == null) return;
-    const { new_password, ...rest } = studentEditForm;
-    const body = { ...rest } as Record<string, unknown>;
+    const { new_password, sections, ...rest } = studentEditForm;
+    const body = { ...rest, sections } as Record<string, unknown>;
     if (new_password && String(new_password).trim()) body.new_password = String(new_password).trim();
     try {
       const res = await fetch(apiUrl(`/api/users/${studentEditId}/`), {
@@ -322,15 +324,15 @@ export const AdminLayout: React.FC = () => {
           password: addStudentForm.password.trim(),
           phone: addStudentForm.phone.trim() || '',
           department: addStudentForm.department || '',
-          section: addStudentForm.section || '',
+          sections: addStudentForm.sections || [],
           year: addStudentForm.year || '1'
         })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setApiStudents(prev => [...prev, { id: data.id, username: data.username, email: data.email, role: 'student', full_name: data.full_name, roll_number: data.roll_number, phone: data.phone ?? null, department: data.department ?? null, section: data.section ?? null, year: data.year ?? null, visible_password: addStudentForm.password }]);
+        setApiStudents(prev => [...prev, { id: data.id, username: data.username, email: data.email, role: 'student', full_name: data.full_name, roll_number: data.roll_number, phone: data.phone ?? null, department: data.department ?? null, section: data.section ?? null, sections: Array.isArray(data.sections) ? data.sections : undefined, year: data.year ?? null, visible_password: addStudentForm.password }]);
         setAddStudentOpen(false);
-        setAddStudentForm({ full_name: '', roll_number: '', email: '', password: '', department: '', section: '', year: '1', phone: '' });
+        setAddStudentForm({ full_name: '', roll_number: '', email: '', password: '', department: '', sections: [], year: '1', phone: '' });
         toast({ title: 'Student added', description: 'New student can log in with email and password.' });
       } else {
         const msg = data.email?.[0] || data.roll_number?.[0] || data.username?.[0] || data.detail || 'Could not add student.';
@@ -703,13 +705,13 @@ export const AdminLayout: React.FC = () => {
   const [attSubjects, setAttSubjects] = useState<string[]>([]);
   const [attSections, setAttSections] = useState<string[]>([]);
   const [attData, setAttData] = useState<Record<string, number>>({});
-  const [attStudents, setAttStudents] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; email: string; department: string | null; section: string | null; year: string | null }>>([]);
+  const [attStudents, setAttStudents] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; email: string; department: string | null; section: string | null; sections?: string[]; year: string | null }>>([]);
   const [attRecords, setAttRecords] = useState<Array<{ student: number; subject: string; date: string; status: string; hours?: number | null; total_hours?: number | null }>>([]);
   const [attSessionTotalHours, setAttSessionTotalHours] = useState<number>(1);
   const [attStudentsLoading, setAttStudentsLoading] = useState(false);
   const [isUploadingAttendance, setIsUploadingAttendance] = useState(false);
 
-  const [attAllStudentsForReport, setAttAllStudentsForReport] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; section: string | null }>>([]);
+  const [attAllStudentsForReport, setAttAllStudentsForReport] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; section: string | null; sections?: string[] }>>([]);
   const [attReportFromDate, setAttReportFromDate] = useState<Date | null>(null);
   const [attReportToDate, setAttReportToDate] = useState<Date | null>(null);
 
@@ -757,9 +759,9 @@ export const AdminLayout: React.FC = () => {
     ? attSubjectsFiltered.filter((s: { semester?: string }) => String(s.semester ?? '1') === attSemester)
     : attSubjectsFiltered;
   const attStudentsInSection = attStudents
-    .map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, section: s.section || '' }))
-    .filter(s => attSections.length === 0 || attSections.includes(s.section))
-    .filter(s => selectedAttDeptCodes.length === 0 || selectedAttDeptCodes.includes((attStudents.find(x => String(x.id) === s.id)?.department ?? '')));
+    .filter(s => attSections.length === 0 || studentMatchesAnySection(s, attSections))
+    .filter(s => selectedAttDeptCodes.length === 0 || selectedAttDeptCodes.includes(s.department ?? ''))
+    .map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, section: s.section || '' }));
   const selectedAttSubjectObjs = attSubjectsSem.filter((s: { id: number }) => attSubjects.includes(String(s.id)));
   const attSubjectCodes = selectedAttSubjectObjs.map((s: { code?: string }) => (s.code ?? '').trim().toLowerCase()).filter(Boolean);
   const attSubjectNames = selectedAttSubjectObjs.map((s: { name?: string }) => (s.name ?? '').trim().toLowerCase()).filter(Boolean);
@@ -891,7 +893,14 @@ export const AdminLayout: React.FC = () => {
   };
 
   const attStudentIdToInfo = Object.fromEntries(
-    (attAllStudentsForReport.length ? attAllStudentsForReport : apiStudents.length ? apiStudents : attStudents).map((s: { id: number; full_name?: string | null; roll_number?: string | null; section?: string | null }) => [s.id, { name: s.full_name || s.roll_number || '', roll: s.roll_number || '', section: s.section || '' }])
+    (attAllStudentsForReport.length ? attAllStudentsForReport : apiStudents.length ? apiStudents : attStudents).map((s: { id: number; full_name?: string | null; roll_number?: string | null; section?: string | null; sections?: string[] }) => [
+      s.id,
+      {
+        name: s.full_name || s.roll_number || '',
+        roll: s.roll_number || '',
+        section: formatStudentSectionsDisplay(s).replace(/^–$/, ''),
+      },
+    ])
   );
   const downloadCsv = (filename: string, rows: string[][]) => {
     const header = rows[0];
@@ -1430,7 +1439,7 @@ export const AdminLayout: React.FC = () => {
                   <CardDescription>Add students (single or bulk import), view and manage by class. Only admin can add students.</CardDescription>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <Button onClick={() => { setAddStudentForm({ full_name: '', roll_number: '', email: '', password: '', department: '', section: '', year: '1', phone: '' }); setAddStudentOpen(true); }}>
+                  <Button onClick={() => { setAddStudentForm({ full_name: '', roll_number: '', email: '', password: '', department: '', sections: [], year: '1', phone: '' }); setAddStudentOpen(true); }}>
                     <UserPlus className="w-4 h-4 mr-2" /> Add Student
                   </Button>
                   <input type="file" accept=".xlsx" className="hidden" id="students-bulk-import" onChange={handleImportFromExcel} />
@@ -1476,7 +1485,7 @@ export const AdminLayout: React.FC = () => {
                   const list = Array.isArray(apiStudents) ? apiStudents : [];
                   const filtered = list.filter(s => {
                     if (studentFilterDept && studentFilterDept !== '__all__' && s.department !== studentFilterDept) return false;
-                    if (studentFilterSection.trim() && s.section !== studentFilterSection.trim()) return false;
+                    if (studentFilterSection.trim() && !studentMatchesAnySection(s, [studentFilterSection.trim()])) return false;
                     if (studentFilterYear.trim() && s.year !== studentFilterYear.trim()) return false;
                     return true;
                   });
@@ -1506,7 +1515,17 @@ export const AdminLayout: React.FC = () => {
                                 <td className="p-2">{student.full_name || student.username}</td>
                                 <td className="p-2 text-sm text-muted-foreground">{student.email}</td>
                                 <td className="p-2">{dept?.code ?? student.department}</td>
-                                <td className="p-2"><Badge variant="secondary">{student.section || '–'}</Badge></td>
+                                <td className="p-2">
+                                  <div className="flex flex-wrap gap-1">
+                                    {parseStudentSections(student).length === 0 ? (
+                                      <Badge variant="secondary">–</Badge>
+                                    ) : (
+                                      parseStudentSections(student).map((sec) => (
+                                        <Badge key={sec} variant="secondary">{sec}</Badge>
+                                      ))
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="p-2">{student.year || '–'}</td>
                                 <td className="p-2 font-mono text-sm">{student.visible_password ?? '—'}</td>
                                 <td className="p-2 flex gap-1">
@@ -1568,16 +1587,41 @@ export const AdminLayout: React.FC = () => {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Section</Label>
-                    <Select value={addStudentForm.section || '__none__'} onValueChange={v => setAddStudentForm(f => ({ ...f, section: v === '__none__' ? '' : v }))}>
-                      <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">—</SelectItem>
-                        {(apiSections || []).map((s: { id: number; name: string }) => (
-                          <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Section(s)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {addStudentForm.sections.length > 0 ? `${addStudentForm.sections.length} selected` : 'Select section(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3 max-h-64 overflow-y-auto" align="start">
+                        {(apiSections || []).length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Add sections in the Sections tab first.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex justify-end gap-2 mb-2">
+                              <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => setAddStudentForm(f => ({ ...f, sections: (apiSections || []).map((x: { name: string }) => x.name) }))}>Select all</Button>
+                              <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => setAddStudentForm(f => ({ ...f, sections: [] }))}>Clear all</Button>
+                            </div>
+                            {(apiSections || []).map((s: { id: number; name: string }) => (
+                              <div key={s.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`add-stu-sec-${s.id}`}
+                                  checked={addStudentForm.sections.includes(s.name)}
+                                  onCheckedChange={(checked) => {
+                                    setAddStudentForm(f => ({
+                                      ...f,
+                                      sections: checked ? [...f.sections, s.name] : f.sections.filter((x) => x !== s.name),
+                                    }));
+                                  }}
+                                />
+                                <label htmlFor={`add-stu-sec-${s.id}`} className="text-sm cursor-pointer">{s.name}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="grid gap-2">
                     <Label>Year</Label>
@@ -1603,7 +1647,7 @@ export const AdminLayout: React.FC = () => {
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Edit student details</DialogTitle>
-                  <DialogDescription>Update name, roll number, phone, department, section, and year.</DialogDescription>
+                  <DialogDescription>Update name, roll number, phone, department, section(s), and year.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
@@ -1642,12 +1686,41 @@ export const AdminLayout: React.FC = () => {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Section</Label>
-                    <Input
-                      value={studentEditForm.section}
-                      onChange={e => setStudentEditForm(f => ({ ...f, section: e.target.value }))}
-                      placeholder="e.g. A"
-                    />
+                    <Label>Section(s)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {studentEditForm.sections.length > 0 ? `${studentEditForm.sections.length} selected` : 'Select section(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3 max-h-64 overflow-y-auto" align="start">
+                        {(apiSections || []).length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Add sections in the Sections tab first.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex justify-end gap-2 mb-2">
+                              <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => setStudentEditForm(f => ({ ...f, sections: (apiSections || []).map((x: { name: string }) => x.name) }))}>Select all</Button>
+                              <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => setStudentEditForm(f => ({ ...f, sections: [] }))}>Clear all</Button>
+                            </div>
+                            {(apiSections || []).map((s: { id: number; name: string }) => (
+                              <div key={s.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`edit-stu-sec-${s.id}`}
+                                  checked={studentEditForm.sections.includes(s.name)}
+                                  onCheckedChange={(checked) => {
+                                    setStudentEditForm(f => ({
+                                      ...f,
+                                      sections: checked ? [...f.sections, s.name] : f.sections.filter((x) => x !== s.name),
+                                    }));
+                                  }}
+                                />
+                                <label htmlFor={`edit-stu-sec-${s.id}`} className="text-sm cursor-pointer">{s.name}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="grid gap-2">
                     <Label>Year</Label>

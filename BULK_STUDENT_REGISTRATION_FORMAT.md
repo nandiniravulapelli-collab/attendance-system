@@ -10,7 +10,7 @@ Use this format when importing students via **Admin → Students → Import from
 | **roll_number** | Roll number (required)       | 20ABC123       |
 | **email**     | Email (required, unique)       | john@example.com |
 | **department** | Department/branch code        | CSE            |
-| **section**   | Section                        | A              |
+| **section**   | Section(s); use **comma** or **semicolon** for multiple | `A` or `A,B` or `A; B` |
 | **year**      | Academic year                  | 2              |
 
 - Header names are **case-insensitive** (e.g. `Full_Name` or `full_name` both work).
@@ -23,6 +23,7 @@ Use this format when importing students via **Admin → Students → Import from
 - New students get their **initial password = roll_number** (they can change it after login).
 - If a student with the same roll_number already exists, that row is skipped.
 - **department** should match a branch code created under Admin → Branches (e.g. CSE, ECE, MECH).
+- **section** can list multiple values so the student appears when marking attendance for any of those sections (e.g. `A,B` matches sections A and B).
 
 ## Example (first 2 rows)
 
