@@ -350,8 +350,8 @@ export const StudentLayout: React.FC = () => {
                     <p className="font-medium">{department?.name || apiProfile?.department || '–'}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Section</p>
-                    <p className="font-medium">{displaySection != null ? `Section ${displaySection}` : '–'}</p>
+                    <p className="text-sm text-muted-foreground">Section(s)</p>
+                    <p className="font-medium">{displaySectionRaw ? displaySectionRaw.split(',').map(s => s.trim()).filter(Boolean).join(', ') : '–'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Year</p>
