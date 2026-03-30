@@ -251,7 +251,7 @@ export const AdminLayout: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'branches' && activeTab !== 'subjects' && activeTab !== 'sections' && activeTab !== 'students' && activeTab !== 'student-detention' && activeTab !== 'faculty' && activeTab !== 'mark-attendance') return;
+    if (activeTab !== 'branches' && activeTab !== 'subjects' && activeTab !== 'sections' && activeTab !== 'students' && activeTab !== 'student-detention' && activeTab !== 'faculty' && activeTab !== 'mark-attendance' && activeTab !== 'attendance-records') return;
     const fetchDepartments = async () => {
       setDepartmentsLoading(true);
       try {
@@ -270,7 +270,7 @@ export const AdminLayout: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'sections' && activeTab !== 'mark-attendance' && activeTab !== 'students' && activeTab !== 'student-detention') return;
+    if (activeTab !== 'sections' && activeTab !== 'mark-attendance' && activeTab !== 'students' && activeTab !== 'student-detention' && activeTab !== 'attendance-records') return;
     setSectionsLoading(true);
     fetch(apiUrl('/api/sections/'), { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
@@ -290,7 +290,7 @@ export const AdminLayout: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'subjects' && activeTab !== 'faculty' && activeTab !== 'mark-attendance') return;
+    if (activeTab !== 'subjects' && activeTab !== 'faculty' && activeTab !== 'mark-attendance' && activeTab !== 'attendance-records') return;
     const fetchSubjects = async () => {
       setSubjectsLoading(true);
       try {
@@ -829,9 +829,13 @@ export const AdminLayout: React.FC = () => {
   const [attStudentsLoading, setAttStudentsLoading] = useState(false);
   const [isUploadingAttendance, setIsUploadingAttendance] = useState(false);
 
-  const [attAllStudentsForReport, setAttAllStudentsForReport] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; section: string | null; sections?: string[] }>>([]);
+  const [attAllStudentsForReport, setAttAllStudentsForReport] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; username?: string; section: string | null; sections?: string[]; department?: string | null; year?: string | null }>>([]);
   const [attReportFromDate, setAttReportFromDate] = useState<Date | null>(null);
   const [attReportToDate, setAttReportToDate] = useState<Date | null>(null);
+  const [attRecordFilterYears, setAttRecordFilterYears] = useState<string[]>([]);
+  const [attRecordFilterBranches, setAttRecordFilterBranches] = useState<string[]>([]);
+  const [attRecordFilterSections, setAttRecordFilterSections] = useState<string[]>([]);
+  const [attRecordFilterSubjects, setAttRecordFilterSubjects] = useState<string[]>([]);
 
   useEffect(() => {
     if (activeTab !== 'mark-attendance' && activeTab !== 'attendance-records' && activeTab !== 'reports') return;
@@ -1011,16 +1015,75 @@ export const AdminLayout: React.FC = () => {
     }
   };
 
-  const attStudentIdToInfo = Object.fromEntries(
-    (attAllStudentsForReport.length ? attAllStudentsForReport : apiStudents.length ? apiStudents : attStudents).map((s: { id: number; full_name?: string | null; roll_number?: string | null; username?: string; section?: string | null; sections?: string[] }) => [
-      s.id,
-      {
-        name: s.full_name || s.roll_number || s.username || '',
-        roll: (s.roll_number || s.username || '').trim(),
-        section: formatStudentSectionsDisplay(s).replace(/^–$/, ''),
-      },
-    ])
-  );
+  const attStudentIdToInfo = useMemo(() => (
+    Object.fromEntries(
+      (attAllStudentsForReport.length ? attAllStudentsForReport : apiStudents.length ? apiStudents : attStudents).map((s: { id: number; full_name?: string | null; roll_number?: string | null; username?: string; section?: string | null; sections?: string[]; department?: string | null; year?: string | null }) => [
+        s.id,
+        {
+          name: s.full_name || s.roll_number || s.username || '',
+          roll: (s.roll_number || s.username || '').trim(),
+          section: formatStudentSectionsDisplay(s).replace(/^–$/, ''),
+          sectionRaw: s.section ?? '',
+          sectionsRaw: parseStudentSections(s),
+          department: (s.department || '').trim(),
+          year: (s.year || '').trim(),
+        },
+      ])
+    )
+  ), [attAllStudentsForReport, apiStudents, attStudents]);
+
+  const attRecordYearOptions = useMemo(() => {
+    const set = new Set<string>();
+    Object.values(attStudentIdToInfo).forEach((s) => {
+      if (s.year) set.add(s.year);
+    });
+    return Array.from(set).sort((a, b) => Number(a) - Number(b) || a.localeCompare(b));
+  }, [attStudentIdToInfo]);
+
+  const attRecordBranchOptions = useMemo(() => {
+    const fromStudents = new Set<string>();
+    Object.values(attStudentIdToInfo).forEach((s) => {
+      if (s.department) fromStudents.add(s.department);
+    });
+    const merged = new Set<string>([
+      ...Array.from(fromStudents),
+      ...(apiDepartments || []).map((d: { code: string }) => d.code).filter(Boolean),
+    ]);
+    return Array.from(merged).sort((a, b) => a.localeCompare(b));
+  }, [attStudentIdToInfo, apiDepartments]);
+
+  const attRecordSectionOptions = useMemo(() => {
+    const merged = new Set<string>((apiSections || []).map((s: { name: string }) => s.name).filter(Boolean));
+    Object.values(attStudentIdToInfo).forEach((s) => {
+      (s.sectionsRaw || []).forEach((v: string) => {
+        if (v) merged.add(v);
+      });
+      if (s.sectionRaw) merged.add(s.sectionRaw);
+    });
+    return Array.from(merged).sort((a, b) => a.localeCompare(b));
+  }, [attStudentIdToInfo, apiSections]);
+
+  const attRecordSubjectOptions = useMemo(() => {
+    const byRecords = new Set<string>(attRecords.map((r) => (r.subject || '').trim()).filter(Boolean));
+    return Array.from(byRecords).sort((a, b) => a.localeCompare(b));
+  }, [attRecords]);
+
+  const filteredAttRecords = useMemo(() => {
+    const selectedYears = new Set(attRecordFilterYears);
+    const selectedBranches = new Set(attRecordFilterBranches.map((v) => v.toLowerCase()));
+    const selectedSections = attRecordFilterSections;
+    const selectedSubjects = new Set(attRecordFilterSubjects.map((v) => v.toLowerCase()));
+
+    return attRecords.filter((r) => {
+      const info = attStudentIdToInfo[r.student];
+      if (!info) return false;
+      if (selectedYears.size > 0 && !selectedYears.has(info.year || '')) return false;
+      if (selectedBranches.size > 0 && !selectedBranches.has((info.department || '').toLowerCase())) return false;
+      if (selectedSections.length > 0 && !studentMatchesAnySection({ section: info.sectionRaw || null, sections: info.sectionsRaw }, selectedSections)) return false;
+      if (selectedSubjects.size > 0 && !selectedSubjects.has((r.subject || '').trim().toLowerCase())) return false;
+      return true;
+    });
+  }, [attRecords, attStudentIdToInfo, attRecordFilterYears, attRecordFilterBranches, attRecordFilterSections, attRecordFilterSubjects]);
   const downloadCsv = (filename: string, rows: string[][]) => {
     const header = rows[0];
     const body = rows.slice(1);
@@ -2908,6 +2971,148 @@ export const AdminLayout: React.FC = () => {
                 <CardDescription>System-wide attendance entries. Filter by date range to see attendance between specific days.</CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                  <div className="space-y-1">
+                    <Label>Year</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {attRecordFilterYears.length > 0 ? `${attRecordFilterYears.length} selected` : 'Select year(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterYears(attRecordYearOptions)}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterYears([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {attRecordYearOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No years available.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {attRecordYearOptions.map((y) => (
+                              <div key={y} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`att-rec-year-${y}`}
+                                  checked={attRecordFilterYears.includes(y)}
+                                  onCheckedChange={(checked) => setAttRecordFilterYears(checked ? [...attRecordFilterYears, y] : attRecordFilterYears.filter(v => v !== y))}
+                                />
+                                <label htmlFor={`att-rec-year-${y}`} className="text-sm cursor-pointer">Year {y}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Branch</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {attRecordFilterBranches.length > 0 ? `${attRecordFilterBranches.length} selected` : 'Select branch(es)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterBranches(attRecordBranchOptions)}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterBranches([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {attRecordBranchOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No branches available.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {attRecordBranchOptions.map((branch) => (
+                              <div key={branch} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`att-rec-branch-${branch}`}
+                                  checked={attRecordFilterBranches.includes(branch)}
+                                  onCheckedChange={(checked) => setAttRecordFilterBranches(checked ? [...attRecordFilterBranches, branch] : attRecordFilterBranches.filter(v => v !== branch))}
+                                />
+                                <label htmlFor={`att-rec-branch-${branch}`} className="text-sm cursor-pointer">{branch}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Section</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {attRecordFilterSections.length > 0 ? `${attRecordFilterSections.length} selected` : 'Select section(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSections(attRecordSectionOptions)}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSections([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {attRecordSectionOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No sections available.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {attRecordSectionOptions.map((section) => (
+                              <div key={section} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`att-rec-sec-${section}`}
+                                  checked={attRecordFilterSections.includes(section)}
+                                  onCheckedChange={(checked) => setAttRecordFilterSections(checked ? [...attRecordFilterSections, section] : attRecordFilterSections.filter(v => v !== section))}
+                                />
+                                <label htmlFor={`att-rec-sec-${section}`} className="text-sm cursor-pointer">{section}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Subject</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal">
+                          {attRecordFilterSubjects.length > 0 ? `${attRecordFilterSubjects.length} selected` : 'Select subject(s)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSubjects(attRecordSubjectOptions)}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSubjects([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {attRecordSubjectOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No subjects available.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {attRecordSubjectOptions.map((subject) => (
+                              <div key={subject} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`att-rec-sub-${subject}`}
+                                  checked={attRecordFilterSubjects.includes(subject)}
+                                  onCheckedChange={(checked) => setAttRecordFilterSubjects(checked ? [...attRecordFilterSubjects, subject] : attRecordFilterSubjects.filter(v => v !== subject))}
+                                />
+                                <label htmlFor={`att-rec-sub-${subject}`} className="text-sm cursor-pointer">{subject}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-4 items-end mb-4">
                   <div className="space-y-1">
                     <Label>From date</Label>
@@ -2939,9 +3144,13 @@ export const AdminLayout: React.FC = () => {
                     onClick={() => {
                       setAttReportFromDate(null);
                       setAttReportToDate(null);
+                      setAttRecordFilterYears([]);
+                      setAttRecordFilterBranches([]);
+                      setAttRecordFilterSections([]);
+                      setAttRecordFilterSubjects([]);
                     }}
                   >
-                    Clear dates
+                    Clear all filters
                   </Button>
                 </div>
                 <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
@@ -2956,7 +3165,7 @@ export const AdminLayout: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {attRecords.slice(0, 500).map((r, i) => (
+                      {filteredAttRecords.slice(0, 500).map((r, i) => (
                         <tr key={i} className="border-b">
                           <td className="p-2">{r.date}</td>
                           <td className="p-2 font-mono">{attStudentIdToInfo[r.student]?.roll || '–'}</td>
@@ -2968,7 +3177,7 @@ export const AdminLayout: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
-                {attRecords.length > 500 && <p className="text-sm text-muted-foreground mt-2">Showing first 500 of {attRecords.length} records.</p>}
+                {filteredAttRecords.length > 500 && <p className="text-sm text-muted-foreground mt-2">Showing first 500 of {filteredAttRecords.length} filtered records.</p>}
               </CardContent>
             </Card>
           </TabsContent>
