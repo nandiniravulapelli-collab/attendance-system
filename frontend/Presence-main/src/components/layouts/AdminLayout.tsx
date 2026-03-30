@@ -1135,13 +1135,13 @@ export const AdminLayout: React.FC = () => {
   };
   const handleDownloadSubjectWise = () => {
     const rows: string[][] = [['Subject', 'Date', 'Roll No', 'Student Name', 'Section', 'Status']];
-    const sorted = [...attRecords].sort((a, b) => (a.subject || '').localeCompare(b.subject || '') || (a.date || '').localeCompare(b.date || ''));
+    const sorted = [...filteredAttRecords].sort((a, b) => (a.subject || '').localeCompare(b.subject || '') || (a.date || '').localeCompare(b.date || ''));
     sorted.forEach(r => {
       const info = attStudentIdToInfo[r.student];
       rows.push([r.subject || '', r.date || '', info?.roll ?? '', info?.name ?? '', info?.section ?? '', r.status || '']);
     });
     if (rows.length <= 1) {
-      toast({ title: 'No data', description: 'No attendance records.', variant: 'destructive' });
+      toast({ title: 'No data', description: 'No attendance records match your filters.', variant: 'destructive' });
       return;
     }
     downloadCsv(`attendance_subject_wise_${format(new Date(), 'yyyy-MM-dd')}.csv`, rows);
@@ -1149,7 +1149,7 @@ export const AdminLayout: React.FC = () => {
   };
   const handleDownloadSectionWise = () => {
     const rows: string[][] = [['Section', 'Subject', 'Date', 'Roll No', 'Student Name', 'Status']];
-    const sorted = [...attRecords].sort((a, b) => {
+    const sorted = [...filteredAttRecords].sort((a, b) => {
       const secA = attStudentIdToInfo[a.student]?.section ?? '';
       const secB = attStudentIdToInfo[b.student]?.section ?? '';
       return secA.localeCompare(secB) || (a.date || '').localeCompare(b.date || '') || (a.subject || '').localeCompare(b.subject || '');
@@ -1159,7 +1159,7 @@ export const AdminLayout: React.FC = () => {
       rows.push([info?.section ?? '', r.subject || '', r.date || '', info?.roll ?? '', info?.name ?? '', r.status || '']);
     });
     if (rows.length <= 1) {
-      toast({ title: 'No data', description: 'No attendance records.', variant: 'destructive' });
+      toast({ title: 'No data', description: 'No attendance records match your filters.', variant: 'destructive' });
       return;
     }
     downloadCsv(`attendance_section_wise_${format(new Date(), 'yyyy-MM-dd')}.csv`, rows);
@@ -3348,9 +3348,208 @@ export const AdminLayout: React.FC = () => {
               <Card>
                 <CardHeader>
                   <CardTitle>Generate Reports</CardTitle>
-                  <CardDescription>Download attendance and analytics reports</CardDescription>
+                  <CardDescription>
+                    Filter by branch, year, section, subject, and date range. Subject-wise and section-wise CSV exports include only rows that match your selections (leave a filter empty to include all values for that field). These filters are shared with the Attendance Records tab.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                    <p className="text-sm font-medium">Report filters</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <Label>Year</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                              {attRecordFilterYears.length > 0 ? `${attRecordFilterYears.length} selected` : 'All years'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-64 p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-muted-foreground">Quick actions</span>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterYears(attRecordYearOptions)}>Select all</Button>
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterYears([])}>Clear</Button>
+                              </div>
+                            </div>
+                            {attRecordYearOptions.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No years available.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {attRecordYearOptions.map((y) => (
+                                  <div key={y} className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`rep-gen-year-${y}`}
+                                      checked={attRecordFilterYears.includes(y)}
+                                      onCheckedChange={(checked) => setAttRecordFilterYears(checked ? [...attRecordFilterYears, y] : attRecordFilterYears.filter((v) => v !== y))}
+                                    />
+                                    <label htmlFor={`rep-gen-year-${y}`} className="text-sm cursor-pointer">Year {y}</label>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Branch</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                              {attRecordFilterBranches.length > 0 ? `${attRecordFilterBranches.length} selected` : 'All branches'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-72 p-3 max-h-72 overflow-y-auto">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-muted-foreground">Quick actions</span>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterBranches(attRecordBranchOptions)}>Select all</Button>
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterBranches([])}>Clear</Button>
+                              </div>
+                            </div>
+                            {attRecordBranchOptions.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No branches available.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {attRecordBranchOptions.map((branch) => (
+                                  <div key={branch} className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`rep-gen-branch-${branch}`}
+                                      checked={attRecordFilterBranches.includes(branch)}
+                                      onCheckedChange={(checked) =>
+                                        setAttRecordFilterBranches(checked ? [...attRecordFilterBranches, branch] : attRecordFilterBranches.filter((v) => v !== branch))
+                                      }
+                                    />
+                                    <label htmlFor={`rep-gen-branch-${branch}`} className="text-sm cursor-pointer">{branch}</label>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Section</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                              {attRecordFilterSections.length > 0 ? `${attRecordFilterSections.length} selected` : 'All sections'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-64 p-3 max-h-72 overflow-y-auto">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-muted-foreground">Quick actions</span>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSections(attRecordSectionOptions)}>Select all</Button>
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSections([])}>Clear</Button>
+                              </div>
+                            </div>
+                            {attRecordSectionOptions.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No sections available.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {attRecordSectionOptions.map((section) => (
+                                  <div key={section} className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`rep-gen-sec-${section}`}
+                                      checked={attRecordFilterSections.includes(section)}
+                                      onCheckedChange={(checked) =>
+                                        setAttRecordFilterSections(checked ? [...attRecordFilterSections, section] : attRecordFilterSections.filter((v) => v !== section))
+                                      }
+                                    />
+                                    <label htmlFor={`rep-gen-sec-${section}`} className="text-sm cursor-pointer">{section}</label>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Subject</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                              {attRecordFilterSubjects.length > 0 ? `${attRecordFilterSubjects.length} selected` : 'All subjects'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 p-3 max-h-72 overflow-y-auto">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-muted-foreground">Quick actions</span>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSubjects(attRecordSubjectOptions)}>Select all</Button>
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSubjects([])}>Clear</Button>
+                              </div>
+                            </div>
+                            {attRecordSubjectOptions.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No subjects in loaded records.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {attRecordSubjectOptions.map((subject, idx) => (
+                                  <div key={subject} className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`rep-gen-sub-${idx}`}
+                                      checked={attRecordFilterSubjects.includes(subject)}
+                                      onCheckedChange={(checked) =>
+                                        setAttRecordFilterSubjects(checked ? [...attRecordFilterSubjects, subject] : attRecordFilterSubjects.filter((v) => v !== subject))
+                                      }
+                                    />
+                                    <label htmlFor={`rep-gen-sub-${idx}`} className="text-sm cursor-pointer">{subject}</label>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-4 items-end">
+                      <div className="space-y-1">
+                        <Label>From date</Label>
+                        <Input
+                          type="date"
+                          value={attReportFromDate ? format(attReportFromDate, 'yyyy-MM-dd') : ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setAttReportFromDate(v ? new Date(v) : null);
+                          }}
+                          className="w-40"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>To date</Label>
+                        <Input
+                          type="date"
+                          value={attReportToDate ? format(attReportToDate, 'yyyy-MM-dd') : ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setAttReportToDate(v ? new Date(v) : null);
+                          }}
+                          className="w-40"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => {
+                          setAttReportFromDate(null);
+                          setAttReportToDate(null);
+                          setAttRecordFilterYears([]);
+                          setAttRecordFilterBranches([]);
+                          setAttRecordFilterSections([]);
+                          setAttRecordFilterSubjects([]);
+                        }}
+                      >
+                        Clear report filters
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Matching rows: <span className="font-medium text-foreground">{filteredAttRecords.length}</span>
+                      {attRecords.length !== filteredAttRecords.length ? ` of ${attRecords.length} loaded` : ''}.
+                    </p>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={handleDownloadSubjectWise}>
                       <Download className="w-5 h-5 mb-2 self-center" />
