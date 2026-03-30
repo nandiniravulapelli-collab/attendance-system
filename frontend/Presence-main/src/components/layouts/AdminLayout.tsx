@@ -113,6 +113,7 @@ export const AdminLayout: React.FC = () => {
   const [studentFilterSection, setStudentFilterSection] = useState('');
   const [studentFilterYear, setStudentFilterYear] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [defaultersSearchQuery, setDefaultersSearchQuery] = useState('');
   /** Students tab: filter by detention status */
   const [studentDetentionFilter, setStudentDetentionFilter] = useState<'all' | 'active' | 'detained'>('all');
   /** Detention tab: search both lists */
@@ -710,7 +711,19 @@ export const AdminLayout: React.FC = () => {
 
   const [systemAttendance, setSystemAttendance] = useState<{ total_classes: number; present_count: number; attendance_percentage: number } | null>(null);
   const [backendStudentCount, setBackendStudentCount] = useState<number | null>(null);
-  const [backendDefaulters, setBackendDefaulters] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; department: string | null; attendancePercentage: number; presentClasses: number; totalClasses: number }>>([]);
+  const [backendDefaulters, setBackendDefaulters] = useState<Array<{
+    id: number;
+    full_name: string | null;
+    roll_number: string | null;
+    username?: string;
+    department: string | null;
+    year?: string | null;
+    section?: string | null;
+    sections?: string[];
+    attendancePercentage: number;
+    presentClasses: number;
+    totalClasses: number;
+  }>>([]);
   const [dashboardWeeklyTrend, setDashboardWeeklyTrend] = useState<Array<{ name: string; attendance: number }>>([]);
   const [dashboardDistributionPie, setDashboardDistributionPie] = useState<Array<{ name: string; value: number; color: string }>>([]);
 
@@ -731,7 +744,7 @@ export const AdminLayout: React.FC = () => {
     Promise.all([
       fetch(apiUrl('/api/users/?role=student'), { credentials: 'include' }).then(r => r.ok ? r.json() : []),
       fetch(apiUrl('/api/attendance/'), { credentials: 'include' }).then(r => r.ok ? r.json() : { records: [] })
-    ]).then(([studentsList, attData]: [Array<{ id: number; full_name?: string | null; roll_number?: string | null; department?: string | null }>, { records?: Array<{ student: number; status: string; date?: string }> }]) => {
+    ]).then(([studentsList, attData]: [Array<{ id: number; full_name?: string | null; roll_number?: string | null; username?: string; department?: string | null; year?: string | null; section?: string | null; sections?: string[] }>, { records?: Array<{ student: number; status: string; date?: string }> }]) => {
       const list = Array.isArray(studentsList) ? studentsList : [];
       setBackendStudentCount(list.length);
       const records = Array.isArray(attData?.records) ? attData.records : [];
@@ -743,7 +756,7 @@ export const AdminLayout: React.FC = () => {
         if (String(r.status).toLowerCase() === 'present') byStudent[id].present++;
       });
       const defaultersList = list
-        .map((s: { id: number; full_name?: string | null; roll_number?: string | null; department?: string | null }) => {
+        .map((s: { id: number; full_name?: string | null; roll_number?: string | null; username?: string; department?: string | null; year?: string | null; section?: string | null; sections?: string[] }) => {
           const stat = byStudent[s.id] || { present: 0, total: 0 };
           const pct = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
           return { ...s, attendancePercentage: Math.round(pct * 100) / 100, presentClasses: stat.present, totalClasses: stat.total };
@@ -810,7 +823,16 @@ export const AdminLayout: React.FC = () => {
 
   const totalStudentsDisplay = backendStudentCount ?? 0;
   const defaultersCountDisplay = backendDefaulters.length;
-  const defaultersToShow = backendDefaulters;
+  const defaultersToShow = useMemo(() => {
+    const q = defaultersSearchQuery.trim().toLowerCase();
+    if (!q) return backendDefaulters;
+    return backendDefaulters.filter((s) => {
+      const name = (s.full_name || '').toLowerCase();
+      const roll = (s.roll_number || '').toLowerCase();
+      const user = (s.username || '').toLowerCase();
+      return name.includes(q) || roll.includes(q) || user.includes(q);
+    });
+  }, [backendDefaulters, defaultersSearchQuery]);
 
   const attendanceData = dashboardWeeklyTrend;
   const pieData = dashboardDistributionPie;
@@ -836,6 +858,7 @@ export const AdminLayout: React.FC = () => {
   const [attRecordFilterBranches, setAttRecordFilterBranches] = useState<string[]>([]);
   const [attRecordFilterSections, setAttRecordFilterSections] = useState<string[]>([]);
   const [attRecordFilterSubjects, setAttRecordFilterSubjects] = useState<string[]>([]);
+  const [attRecordsSearchQuery, setAttRecordsSearchQuery] = useState('');
 
   useEffect(() => {
     if (activeTab !== 'mark-attendance' && activeTab !== 'attendance-records' && activeTab !== 'reports') return;
@@ -1084,6 +1107,19 @@ export const AdminLayout: React.FC = () => {
       return true;
     });
   }, [attRecords, attStudentIdToInfo, attRecordFilterYears, attRecordFilterBranches, attRecordFilterSections, attRecordFilterSubjects]);
+
+  const attRecordsForTable = useMemo(() => {
+    const q = attRecordsSearchQuery.trim().toLowerCase();
+    if (!q) return filteredAttRecords;
+    return filteredAttRecords.filter((r) => {
+      const info = attStudentIdToInfo[r.student];
+      if (!info) return false;
+      const name = (info.name || '').toLowerCase();
+      const roll = (info.roll || '').toLowerCase();
+      return name.includes(q) || roll.includes(q);
+    });
+  }, [filteredAttRecords, attStudentIdToInfo, attRecordsSearchQuery]);
+
   const downloadCsv = (filename: string, rows: string[][]) => {
     const header = rows[0];
     const body = rows.slice(1);
@@ -3148,11 +3184,25 @@ export const AdminLayout: React.FC = () => {
                       setAttRecordFilterBranches([]);
                       setAttRecordFilterSections([]);
                       setAttRecordFilterSubjects([]);
+                      setAttRecordsSearchQuery('');
                     }}
                   >
                     Clear all filters
                   </Button>
                 </div>
+                <div className="relative max-w-md mb-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    className="pl-9"
+                    placeholder="Search by student name or roll number…"
+                    value={attRecordsSearchQuery}
+                    onChange={(e) => setAttRecordsSearchQuery(e.target.value)}
+                    aria-label="Search attendance records by name or roll number"
+                  />
+                </div>
+                {attRecordsForTable.length === 0 && filteredAttRecords.length > 0 && attRecordsSearchQuery.trim() && (
+                  <p className="text-sm text-muted-foreground mb-2">No records match your search.</p>
+                )}
                 <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -3165,7 +3215,7 @@ export const AdminLayout: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredAttRecords.slice(0, 500).map((r, i) => (
+                      {attRecordsForTable.slice(0, 500).map((r, i) => (
                         <tr key={i} className="border-b">
                           <td className="p-2">{r.date}</td>
                           <td className="p-2 font-mono">{attStudentIdToInfo[r.student]?.roll || '–'}</td>
@@ -3177,7 +3227,7 @@ export const AdminLayout: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
-                {filteredAttRecords.length > 500 && <p className="text-sm text-muted-foreground mt-2">Showing first 500 of {filteredAttRecords.length} filtered records.</p>}
+                {attRecordsForTable.length > 500 && <p className="text-sm text-muted-foreground mt-2">Showing first 500 of {attRecordsForTable.length} filtered records.</p>}
               </CardContent>
             </Card>
           </TabsContent>
@@ -3327,10 +3377,25 @@ export const AdminLayout: React.FC = () => {
                 <CardDescription>Students with less than 85% attendance</CardDescription>
               </CardHeader>
               <CardContent>
-                {defaultersToShow.length === 0 ? (
+                <div className="relative max-w-md mb-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    className="pl-9"
+                    placeholder="Search by name or roll number…"
+                    value={defaultersSearchQuery}
+                    onChange={(e) => setDefaultersSearchQuery(e.target.value)}
+                    aria-label="Search defaulters by name or roll number"
+                  />
+                </div>
+                {backendDefaulters.length === 0 ? (
                   <div className="text-center py-8">
                     <AlertTriangle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-muted-foreground">No defaulters found. Great job!</p>
+                  </div>
+                ) : defaultersToShow.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No students match your search.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -3339,7 +3404,9 @@ export const AdminLayout: React.FC = () => {
                         <tr className="border-b">
                           <th className="text-left p-2">Roll Number</th>
                           <th className="text-left p-2">Name</th>
-                          <th className="text-left p-2">Department</th>
+                          <th className="text-left p-2">Year</th>
+                          <th className="text-left p-2">Branch</th>
+                          <th className="text-left p-2">Section</th>
                           <th className="text-left p-2">Attendance %</th>
                           <th className="text-left p-2">Classes</th>
                           <th className="text-left p-2">Status</th>
@@ -3350,7 +3417,9 @@ export const AdminLayout: React.FC = () => {
                             <tr key={student.id} className="border-b">
                               <td className="p-2 font-mono text-sm">{student.roll_number ?? '–'}</td>
                               <td className="p-2">{student.full_name ?? '–'}</td>
+                              <td className="p-2">{student.year?.trim() ? student.year : '–'}</td>
                               <td className="p-2">{student.department ?? '–'}</td>
+                              <td className="p-2 text-sm">{formatStudentSectionsDisplay(student).replace(/^–$/, '') || '–'}</td>
                               <td className="p-2">
                                 <Badge variant="destructive">{student.attendancePercentage}%</Badge>
                               </td>
