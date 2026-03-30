@@ -952,11 +952,11 @@ export const AdminLayout: React.FC = () => {
   };
 
   const attStudentIdToInfo = Object.fromEntries(
-    (attAllStudentsForReport.length ? attAllStudentsForReport : apiStudents.length ? apiStudents : attStudents).map((s: { id: number; full_name?: string | null; roll_number?: string | null; section?: string | null; sections?: string[] }) => [
+    (attAllStudentsForReport.length ? attAllStudentsForReport : apiStudents.length ? apiStudents : attStudents).map((s: { id: number; full_name?: string | null; roll_number?: string | null; username?: string; section?: string | null; sections?: string[] }) => [
       s.id,
       {
-        name: s.full_name || s.roll_number || '',
-        roll: s.roll_number || '',
+        name: s.full_name || s.roll_number || s.username || '',
+        roll: (s.roll_number || s.username || '').trim(),
         section: formatStudentSectionsDisplay(s).replace(/^–$/, ''),
       },
     ])
@@ -2752,7 +2752,7 @@ export const AdminLayout: React.FC = () => {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left p-2">Date</th>
-                        <th className="text-left p-2">Student ID</th>
+                        <th className="text-left p-2">Roll number</th>
                         <th className="text-left p-2">Student</th>
                         <th className="text-left p-2">Subject</th>
                         <th className="text-left p-2">Status</th>
@@ -2762,7 +2762,7 @@ export const AdminLayout: React.FC = () => {
                       {attRecords.slice(0, 500).map((r, i) => (
                         <tr key={i} className="border-b">
                           <td className="p-2">{r.date}</td>
-                          <td className="p-2 font-mono">{r.student}</td>
+                          <td className="p-2 font-mono">{attStudentIdToInfo[r.student]?.roll || '–'}</td>
                           <td className="p-2">{attStudentIdToInfo[r.student]?.name ?? '–'}</td>
                           <td className="p-2">{r.subject}</td>
                           <td className="p-2"><Badge variant={r.status?.toLowerCase() === 'present' ? 'default' : 'destructive'}>{r.status || '–'}</Badge></td>
