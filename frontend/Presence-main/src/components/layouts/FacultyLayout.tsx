@@ -88,7 +88,8 @@ export const FacultyLayout: React.FC = () => {
   const [satSelectedBranches, setSatSelectedBranches] = useState<string[]>(['__all__']);
   const [satSelectedYears, setSatSelectedYears] = useState<string[]>([]);
   const [satSelectedSections, setSatSelectedSections] = useState<string[]>([]);
-  const [satSelectedSubjectIds, setSatSelectedSubjectIds] = useState<string[]>([]);
+  /** null = all subjects in scope (no filter; checkboxes cleared). Non-null = explicit subject id list. */
+  const [satSubjectFilterIds, setSatSubjectFilterIds] = useState<string[] | null>(null);
 
   const facultyId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
 
@@ -129,10 +130,28 @@ export const FacultyLayout: React.FC = () => {
   }, [subjectsAll, satBranchCodes.join(','), satSelectedYears.join(',')]);
 
   const satSubjectsForColumns = useMemo(() => {
-    if (satSelectedSubjectIds.length === 0) return satSubjectOptions;
-    const idSet = new Set(satSelectedSubjectIds);
+    if (satSubjectFilterIds === null) return satSubjectOptions;
+    const idSet = new Set(satSubjectFilterIds);
     return satSubjectOptions.filter((s) => idSet.has(String(s.id)));
-  }, [satSubjectOptions, satSelectedSubjectIds.join(',')]);
+  }, [satSubjectOptions, satSubjectFilterIds]);
+
+  /** Profile: map assigned subject tokens (ids/codes from API) to codes + names using subject list */
+  const facultyAssignedSubjectDisplay = useMemo(() => {
+    const tokens = apiProfile?.subjects;
+    if (!tokens?.length) return null;
+    const rows = tokens
+      .map((token) => {
+        const t = String(token).trim();
+        if (!t) return null;
+        const sub = apiSubjects.find(
+          (s) => String(s.id) === t || String(s.code).toLowerCase() === t.toLowerCase(),
+        );
+        if (sub) return { code: sub.code, name: sub.name };
+        return { code: t, name: null as string | null };
+      })
+      .filter(Boolean) as Array<{ code: string; name: string | null }>;
+    return rows.length ? rows : null;
+  }, [apiProfile?.subjects, apiSubjects]);
 
   const satStudentsRows = useMemo(() => {
     return apiStudents
@@ -1270,8 +1289,8 @@ export const FacultyLayout: React.FC = () => {
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs text-muted-foreground">Quick actions</span>
                           <div className="flex gap-2">
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedBranches(['__all__']); setSatSelectedSubjectIds([]); }}>All</Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedBranches([]); setSatSelectedSubjectIds([]); }}>Clear</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedBranches(['__all__']); setSatSubjectFilterIds(null); }}>All</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedBranches([]); setSatSubjectFilterIds(null); }}>Clear</Button>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2 mb-2">
@@ -1281,7 +1300,7 @@ export const FacultyLayout: React.FC = () => {
                             onCheckedChange={(c) => {
                               if (c) setSatSelectedBranches(['__all__']);
                               else setSatSelectedBranches([]);
-                              setSatSelectedSubjectIds([]);
+                              setSatSubjectFilterIds(null);
                             }}
                           />
                           <label htmlFor="sat-branch-all" className="text-sm font-medium cursor-pointer">All branches</label>
@@ -1295,7 +1314,7 @@ export const FacultyLayout: React.FC = () => {
                                 const current = satSelectedBranches.includes('__all__') ? [] : satSelectedBranches.filter((b) => b !== '__all__');
                                 const next = checked ? [...current, d.code] : current.filter((v) => v !== d.code);
                                 setSatSelectedBranches(next);
-                                setSatSelectedSubjectIds([]);
+                                setSatSubjectFilterIds(null);
                               }}
                             />
                             <label htmlFor={`sat-branch-${d.id}`} className="text-sm cursor-pointer">{d.code} – {d.name}</label>
@@ -1317,8 +1336,8 @@ export const FacultyLayout: React.FC = () => {
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs text-muted-foreground">Quick actions</span>
                           <div className="flex gap-2">
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedYears([...SAT_YEAR_OPTIONS]); setSatSelectedSubjectIds([]); }}>All</Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedYears([]); setSatSelectedSubjectIds([]); }}>Clear</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedYears([...SAT_YEAR_OPTIONS]); setSatSubjectFilterIds(null); }}>All</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedYears([]); setSatSubjectFilterIds(null); }}>Clear</Button>
                           </div>
                         </div>
                         <div className="space-y-2">
@@ -1332,7 +1351,7 @@ export const FacultyLayout: React.FC = () => {
                                     const next = checked ? [...prev, y] : prev.filter((v) => v !== y);
                                     return next;
                                   });
-                                  setSatSelectedSubjectIds([]);
+                                  setSatSubjectFilterIds(null);
                                 }}
                               />
                               <label htmlFor={`sat-year-${y}`} className="text-sm cursor-pointer">Year {y}</label>
@@ -1388,7 +1407,7 @@ export const FacultyLayout: React.FC = () => {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
-                          {satSelectedSubjectIds.length === 0 ? 'All subjects (in scope)' : `${satSelectedSubjectIds.length} selected`}
+                          {satSubjectFilterIds === null ? 'All subjects (in scope)' : `${satSubjectFilterIds.length} selected`}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-80 p-3 max-h-72 overflow-y-auto">
@@ -1399,11 +1418,11 @@ export const FacultyLayout: React.FC = () => {
                               size="sm"
                               variant="outline"
                               className="h-7 px-2"
-                              onClick={() => setSatSelectedSubjectIds(satSubjectOptions.map((s) => String(s.id)))}
+                              onClick={() => setSatSubjectFilterIds(satSubjectOptions.map((s) => String(s.id)))}
                             >
                               All
                             </Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setSatSelectedSubjectIds([])}>Clear</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setSatSubjectFilterIds(null)}>Clear</Button>
                           </div>
                         </div>
                         {satSubjectOptions.length === 0 ? (
@@ -1412,24 +1431,23 @@ export const FacultyLayout: React.FC = () => {
                           <div className="space-y-2">
                             {satSubjectOptions.map((subject) => {
                               const id = String(subject.id);
-                              const allIds = satSubjectOptions.map((s) => String(s.id));
-                              const checked =
-                                satSelectedSubjectIds.length === 0 || satSelectedSubjectIds.includes(id);
+                              const isAllMode = satSubjectFilterIds === null;
+                              const checked = !isAllMode && satSubjectFilterIds.includes(id);
                               return (
                                 <div key={id} className="flex items-center space-x-2">
                                   <Checkbox
                                     id={`sat-subj-${id}`}
                                     checked={checked}
                                     onCheckedChange={(isChecked) => {
-                                      if (satSelectedSubjectIds.length === 0) {
-                                        if (!isChecked) setSatSelectedSubjectIds(allIds.filter((x) => x !== id));
+                                      if (satSubjectFilterIds === null) {
+                                        if (isChecked) setSatSubjectFilterIds([id]);
                                         return;
                                       }
                                       if (isChecked) {
-                                        const next = [...satSelectedSubjectIds, id];
-                                        setSatSelectedSubjectIds(next.length >= allIds.length ? [] : next);
+                                        setSatSubjectFilterIds([...satSubjectFilterIds, id]);
                                       } else {
-                                        setSatSelectedSubjectIds(satSelectedSubjectIds.filter((v) => v !== id));
+                                        const next = satSubjectFilterIds.filter((v) => v !== id);
+                                        setSatSubjectFilterIds(next.length === 0 ? null : next);
                                       }
                                     }}
                                   />
@@ -1689,10 +1707,19 @@ export const FacultyLayout: React.FC = () => {
                     </p>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="text-sm text-muted-foreground">Assigned subjects (IDs/codes)</label>
-                    <p className="font-medium text-sm leading-relaxed">
-                      {apiProfile?.subjects?.length ? apiProfile.subjects.join(', ') : '–'}
-                    </p>
+                    <label className="text-sm text-muted-foreground">Assigned subjects</label>
+                    {facultyAssignedSubjectDisplay?.length ? (
+                      <>
+                        <p className="font-mono text-sm font-semibold tracking-tight mt-1">
+                          {facultyAssignedSubjectDisplay.map((p) => p.code).join(', ')}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                          {facultyAssignedSubjectDisplay.map((p) => (p.name ? `${p.code} — ${p.name}` : p.code)).join(' · ')}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="font-medium">–</p>
+                    )}
                   </div>
                 </div>
               </CardContent>
