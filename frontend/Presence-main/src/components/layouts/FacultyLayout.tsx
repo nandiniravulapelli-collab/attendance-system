@@ -84,11 +84,14 @@ export const FacultyLayout: React.FC = () => {
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [profileEditForm, setProfileEditForm] = useState({ full_name: '', phone: '', username: '', email: '' });
 
-  /** Student Attendance tab — multi-select filters (independent from Mark Attendance) */
-  const [satSelectedBranches, setSatSelectedBranches] = useState<string[]>(['__all__']);
+  /** Assigned subject ids/codes from API — only these subjects appear for this faculty */
+  const [facultyAssignedSubjectTokens, setFacultyAssignedSubjectTokens] = useState<string[]>([]);
+
+  /** Student Attendance tab — multi-select filters (independent from Mark Attendance); start empty until faculty chooses filters */
+  const [satSelectedBranches, setSatSelectedBranches] = useState<string[]>([]);
   const [satSelectedYears, setSatSelectedYears] = useState<string[]>([]);
   const [satSelectedSections, setSatSelectedSections] = useState<string[]>([]);
-  /** null = all subjects in scope (no filter; checkboxes cleared). Non-null = explicit subject id list. */
+  /** null = no subjects chosen yet (table hidden). Non-null list = explicit subject ids; table requires length > 0. */
   const [satSubjectFilterIds, setSatSubjectFilterIds] = useState<string[] | null>(null);
 
   const facultyId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
@@ -104,10 +107,25 @@ export const FacultyLayout: React.FC = () => {
     ? facultyDeptCodes
     : selectedBranches;
 
-  // Subjects: from API, filtered by faculty's department(s) and selected branch(es)
-  const subjectsAll = facultyDeptCodes.length > 0 && apiSubjects.length > 0
-    ? apiSubjects.filter((s: { department_code?: string }) => facultyDeptCodes.includes(s.department_code ?? ''))
-    : apiSubjects;
+  const subjectsAllBase = useMemo(() => {
+    if (facultyDeptCodes.length > 0 && apiSubjects.length > 0) {
+      return apiSubjects.filter((s: { department_code?: string }) => facultyDeptCodes.includes(s.department_code ?? ''));
+    }
+    return apiSubjects;
+  }, [apiSubjects, facultyDeptCodes.join(',')]);
+
+  /** Only subjects assigned to this faculty (admin-managed); others hidden everywhere */
+  const subjectsAll = useMemo(() => {
+    if (!facultyAssignedSubjectTokens.length) return [];
+    const tokenSet = new Set(facultyAssignedSubjectTokens.map((t) => t.trim()).filter(Boolean));
+    const tokenLower = new Set(Array.from(tokenSet).map((t) => t.toLowerCase()));
+    return subjectsAllBase.filter((s) => {
+      const id = String(s.id);
+      const code = (s.code ?? '').toString().trim();
+      return tokenSet.has(id) || (code !== '' && (tokenSet.has(code) || tokenLower.has(code.toLowerCase())));
+    });
+  }, [subjectsAllBase, facultyAssignedSubjectTokens.join('|')]);
+
   const subjectsByBranch = selectedBranchCodes.length > 0
     ? subjectsAll.filter((s: { department_code?: string }) => selectedBranchCodes.includes(s.department_code ?? ''))
     : subjectsAll;
@@ -117,14 +135,16 @@ export const FacultyLayout: React.FC = () => {
   const facultyBranchOptions = apiDepartments.filter((d: { code: string }) => facultyDeptCodes.includes(d.code));
 
   const satBranchCodes = useMemo(() => {
-    if (satSelectedBranches.includes('__all__') || satSelectedBranches.length === 0) return facultyDeptCodes;
+    if (satSelectedBranches.length === 0) return [];
+    if (satSelectedBranches.includes('__all__')) return facultyDeptCodes;
     return satSelectedBranches.filter((b) => b !== '__all__');
   }, [satSelectedBranches, facultyDeptCodes.join(',')]);
 
   const satSubjectOptions = useMemo(() => {
+    if (satBranchCodes.length === 0 || satSelectedYears.length === 0) return [];
     return subjectsAll.filter((s) => {
-      if (satBranchCodes.length > 0 && !satBranchCodes.includes(s.department_code ?? '')) return false;
-      if (satSelectedYears.length > 0 && !satSelectedYears.includes(String(s.year ?? '1'))) return false;
+      if (!satBranchCodes.includes(s.department_code ?? '')) return false;
+      if (!satSelectedYears.includes(String(s.year ?? '1'))) return false;
       return true;
     });
   }, [subjectsAll, satBranchCodes.join(','), satSelectedYears.join(',')]);
@@ -135,11 +155,21 @@ export const FacultyLayout: React.FC = () => {
     return satSubjectOptions.filter((s) => idSet.has(String(s.id)));
   }, [satSubjectOptions, satSubjectFilterIds]);
 
-  /** Profile: map assigned subject tokens (ids/codes from API) to codes + names using subject list */
+  /** Student attendance table only after branch, year, section, and at least one subject are chosen */
+  const satAttendanceViewReady = useMemo(
+    () =>
+      satBranchCodes.length > 0 &&
+      satSelectedYears.length > 0 &&
+      satSelectedSections.length > 0 &&
+      satSubjectFilterIds !== null &&
+      satSubjectFilterIds.length > 0,
+    [satBranchCodes.length, satSelectedYears.length, satSelectedSections.length, satSubjectFilterIds],
+  );
+
+  /** Profile: map assigned subject tokens to codes + names */
   const facultyAssignedSubjectDisplay = useMemo(() => {
-    const tokens = apiProfile?.subjects;
-    if (!tokens?.length) return null;
-    const rows = tokens
+    if (!facultyAssignedSubjectTokens.length) return null;
+    const rows = facultyAssignedSubjectTokens
       .map((token) => {
         const t = String(token).trim();
         if (!t) return null;
@@ -151,19 +181,20 @@ export const FacultyLayout: React.FC = () => {
       })
       .filter(Boolean) as Array<{ code: string; name: string | null }>;
     return rows.length ? rows : null;
-  }, [apiProfile?.subjects, apiSubjects]);
+  }, [facultyAssignedSubjectTokens.join('|'), apiSubjects]);
 
   const satStudentsRows = useMemo(() => {
+    if (!satAttendanceViewReady) return [];
     return apiStudents
       .filter((s) => !s.is_detained)
       .filter((s) => facultyDeptCodes.length === 0 || facultyDeptCodes.includes(s.department ?? ''))
-      .filter((s) => satBranchCodes.length === 0 || satBranchCodes.includes(s.department ?? ''))
+      .filter((s) => satBranchCodes.includes(s.department ?? ''))
       .filter((s) => {
         if (satSelectedYears.length === 0) return true;
         const y = (s.year ?? '').toString().trim();
         return satSelectedYears.includes(y);
       })
-      .filter((s) => satSelectedSections.length === 0 || studentMatchesAnySection(s, satSelectedSections))
+      .filter((s) => studentMatchesAnySection(s, satSelectedSections))
       .map((s) => ({
         id: String(s.id),
         name: s.full_name || s.roll_number || '',
@@ -173,7 +204,7 @@ export const FacultyLayout: React.FC = () => {
         section: s.section || '',
         year: s.year ? Number(s.year) : 0,
       }));
-  }, [apiStudents, facultyDeptCodes.join(','), satBranchCodes.join(','), satSelectedYears.join(','), satSelectedSections.join(',')]);
+  }, [apiStudents, facultyDeptCodes.join(','), satBranchCodes.join(','), satSelectedYears.join(','), satSelectedSections.join(','), satAttendanceViewReady]);
 
   useEffect(() => {
     fetch(apiUrl('/api/subjects/'), { credentials: 'include' })
@@ -209,7 +240,8 @@ export const FacultyLayout: React.FC = () => {
     }
     setStudentsLoading(true);
     const params = new URLSearchParams({ role: 'student' });
-    if (activeTab === 'student-attendance') {
+    const useStudentAttendanceScope = activeTab === 'student-attendance' && satBranchCodes.length > 0;
+    if (useStudentAttendanceScope) {
       if (satBranchCodes.length === 1) params.set('department', satBranchCodes[0]);
       if (satSelectedYears.length === 1) params.set('year', satSelectedYears[0]);
     } else {
@@ -614,10 +646,35 @@ export const FacultyLayout: React.FC = () => {
   }, [facultyScopedRecords, facultyScopedStudents]);
 
   useEffect(() => {
+    if (facultyId == null) return;
+    let cancelled = false;
+    fetch(apiUrl(`/api/users/${facultyId}/`), { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        const sub = data.subjects;
+        if (Array.isArray(sub)) {
+          setFacultyAssignedSubjectTokens(sub.map((x: unknown) => String(x).trim()).filter(Boolean));
+        } else {
+          setFacultyAssignedSubjectTokens([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFacultyAssignedSubjectTokens([]);
+      });
+    return () => { cancelled = true; };
+  }, [facultyId]);
+
+  useEffect(() => {
     if (facultyId == null || activeTab !== 'profile') return;
     fetch(apiUrl(`/api/users/${facultyId}/`), { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setApiProfile(data))
+      .then((data) => {
+        setApiProfile(data);
+        if (data && Array.isArray(data.subjects)) {
+          setFacultyAssignedSubjectTokens(data.subjects.map((x: unknown) => String(x).trim()).filter(Boolean));
+        }
+      })
       .catch(() => setApiProfile(null));
   }, [facultyId, activeTab]);
 
@@ -1268,7 +1325,7 @@ export const FacultyLayout: React.FC = () => {
               <CardHeader>
                 <CardTitle>Student Attendance by Subject</CardTitle>
                 <CardDescription>
-                  Filter by branch, year, section, and subject (multi-select). Overall % counts only the subjects shown in the table.
+                  Select branch, year, section, and at least one subject. The table stays hidden until all of these are set. Overall % uses only the subjects you selected.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1278,11 +1335,11 @@ export const FacultyLayout: React.FC = () => {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
-                          {satSelectedBranches.includes('__all__') || satSelectedBranches.length === 0
-                            ? 'All branches'
-                            : satSelectedBranches.filter((b) => b !== '__all__').length > 0
-                              ? `${satSelectedBranches.filter((b) => b !== '__all__').length} selected`
-                              : 'Select branch(es)'}
+                          {satSelectedBranches.length === 0
+                            ? 'Select branch(es)'
+                            : satSelectedBranches.includes('__all__')
+                              ? 'All branches'
+                              : `${satSelectedBranches.filter((b) => b !== '__all__').length} selected`}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-72 p-3">
@@ -1296,7 +1353,7 @@ export const FacultyLayout: React.FC = () => {
                         <div className="flex items-center space-x-2 mb-2">
                           <Checkbox
                             id="sat-branch-all"
-                            checked={satSelectedBranches.includes('__all__') || satSelectedBranches.length === 0}
+                            checked={satSelectedBranches.includes('__all__')}
                             onCheckedChange={(c) => {
                               if (c) setSatSelectedBranches(['__all__']);
                               else setSatSelectedBranches([]);
@@ -1329,7 +1386,7 @@ export const FacultyLayout: React.FC = () => {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
-                          {satSelectedYears.length === 0 ? 'All years' : `${satSelectedYears.length} selected`}
+                          {satSelectedYears.length === 0 ? 'Select year(s)' : `${satSelectedYears.length} selected`}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-56 p-3">
@@ -1367,7 +1424,7 @@ export const FacultyLayout: React.FC = () => {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
-                          {satSelectedSections.length === 0 ? 'All sections' : `${satSelectedSections.length} selected`}
+                          {satSelectedSections.length === 0 ? 'Select section(s)' : `${satSelectedSections.length} selected`}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-64 p-3 max-h-72 overflow-y-auto">
@@ -1391,6 +1448,7 @@ export const FacultyLayout: React.FC = () => {
                                     setSatSelectedSections((prev) =>
                                       checked ? [...prev, s.name] : prev.filter((v) => v !== s.name),
                                     );
+                                    setSatSubjectFilterIds(null);
                                   }}
                                 />
                                 <label htmlFor={`sat-sec-${s.id}`} className="text-sm cursor-pointer">{s.name}</label>
@@ -1407,7 +1465,9 @@ export const FacultyLayout: React.FC = () => {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
-                          {satSubjectFilterIds === null ? 'All subjects (in scope)' : `${satSubjectFilterIds.length} selected`}
+                          {satSubjectFilterIds === null || satSubjectFilterIds.length === 0
+                            ? 'Select subject(s)'
+                            : `${satSubjectFilterIds.length} selected`}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-80 p-3 max-h-72 overflow-y-auto">
@@ -1426,7 +1486,11 @@ export const FacultyLayout: React.FC = () => {
                           </div>
                         </div>
                         {satSubjectOptions.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">No subjects for current branch/year filters.</p>
+                          <p className="text-sm text-muted-foreground">
+                            {satBranchCodes.length === 0 || satSelectedYears.length === 0
+                              ? 'Choose branch and year first.'
+                              : 'No assigned subjects match these filters.'}
+                          </p>
                         ) : (
                           <div className="space-y-2">
                             {satSubjectOptions.map((subject) => {
@@ -1464,10 +1528,12 @@ export const FacultyLayout: React.FC = () => {
                   </div>
                 </div>
 
-                {studentsLoading ? (
+                {!satAttendanceViewReady ? (
+                  <p className="text-muted-foreground">
+                    Set branch, year, section, and at least one subject above to load the attendance table.
+                  </p>
+                ) : studentsLoading ? (
                   <p className="text-muted-foreground">Loading students…</p>
-                ) : satSubjectsForColumns.length === 0 ? (
-                  <p className="text-muted-foreground">No subjects match the filters. Adjust branch or year, or clear subject filters.</p>
                 ) : satStudentsRows.length === 0 ? (
                   <p className="text-muted-foreground">No students match the selected filters.</p>
                 ) : (
@@ -1619,14 +1685,14 @@ export const FacultyLayout: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4">
-                  {subjects.length === 0 ? (
+                  {subjectsAll.length === 0 ? (
                     <div className="py-8 text-center text-muted-foreground">
                       <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
                       <p>No subjects assigned yet.</p>
                       <p className="text-sm mt-1">Ask your admin to assign subjects in Admin → Manage Faculty → Edit your profile.</p>
                     </div>
                   ) : (
-                    subjects.map((subject: { id: string | number; name: string; code: string; credits?: number }) => (
+                    subjectsAll.map((subject: { id: string | number; name: string; code: string; credits?: number }) => (
                       <div key={String(subject.id)} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex items-center space-x-4">
                           <BookOpen className="w-8 h-8 text-primary" />
