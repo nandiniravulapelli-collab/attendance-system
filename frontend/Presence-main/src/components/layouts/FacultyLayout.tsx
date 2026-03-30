@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiUrl } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
 import {
   BookOpen,
   Users,
@@ -23,6 +35,9 @@ import {
   Upload,
   RefreshCw,
   Lock,
+  TrendingUp,
+  AlertTriangle,
+  FileDown,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -36,7 +51,7 @@ type ApiSubject = { id: number; name: string; code: string; department_code: str
 
 export const FacultyLayout: React.FC = () => {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('attendance');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedBranches, setSelectedBranches] = useState<string[]>(['__all__']);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
@@ -407,6 +422,112 @@ export const FacultyLayout: React.FC = () => {
     }
   };
 
+  /** Students and attendance rows scoped to this faculty's branch(es) — used for dashboard analytics */
+  const facultyScopedStudents = useMemo(() => {
+    if (facultyDeptCodes.length === 0) return apiStudents;
+    return apiStudents.filter((s) => facultyDeptCodes.includes(s.department ?? ''));
+  }, [apiStudents, facultyDeptCodes.join(',')]);
+
+  const facultyScopedStudentIds = useMemo(
+    () => new Set(facultyScopedStudents.map((s) => s.id)),
+    [facultyScopedStudents],
+  );
+
+  const facultyScopedRecords = useMemo(
+    () => attendanceRecords.filter((r) => facultyScopedStudentIds.has(r.student)),
+    [attendanceRecords, facultyScopedStudentIds],
+  );
+
+  const facultyDashboardMetrics = useMemo(() => {
+    const records = facultyScopedRecords;
+    const presentCount = records.filter((r) => String(r.status).toLowerCase() === 'present').length;
+    const totalClasses = records.length;
+    const attendancePercentage =
+      totalClasses > 0 ? Math.round((presentCount / totalClasses) * 10000) / 100 : 0;
+
+    const byStudent: Record<number, { present: number; total: number }> = {};
+    records.forEach((r) => {
+      const id = r.student;
+      if (!byStudent[id]) byStudent[id] = { present: 0, total: 0 };
+      byStudent[id].total++;
+      if (String(r.status).toLowerCase() === 'present') byStudent[id].present++;
+    });
+    let defaultersCount = 0;
+    facultyScopedStudents.forEach((s) => {
+      const stat = byStudent[s.id] || { present: 0, total: 0 };
+      const pct = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
+      if (pct < 85) defaultersCount++;
+    });
+
+    return {
+      attendancePercentage,
+      presentCount,
+      totalClasses,
+      defaultersCount,
+    };
+  }, [facultyScopedRecords, facultyScopedStudents]);
+
+  const facultyWeeklyTrend = useMemo(() => {
+    const records = facultyScopedRecords;
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const byDate: Record<string, { present: number; total: number }> = {};
+    records.forEach((r) => {
+      const d = r.date ?? '';
+      if (!d) return;
+      if (!byDate[d]) byDate[d] = { present: 0, total: 0 };
+      byDate[d].total++;
+      if (String(r.status).toLowerCase() === 'present') byDate[d].present++;
+    });
+    const byDayOfWeek: Record<number, number[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+    Object.entries(byDate).forEach(([dateStr, { present, total }]) => {
+      if (total === 0) return;
+      const pct = (present / total) * 100;
+      try {
+        const day = new Date(dateStr).getDay();
+        byDayOfWeek[day].push(pct);
+      } catch {
+        // skip invalid date
+      }
+    });
+    return dayNames.map((name, i) => {
+      const dayIndex = i === 6 ? 0 : i + 1;
+      const arr = byDayOfWeek[dayIndex] || [];
+      const avg = arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+      return { name, attendance: Math.round(avg * 10) / 10 };
+    });
+  }, [facultyScopedRecords]);
+
+  const facultyDistributionPie = useMemo(() => {
+    const records = facultyScopedRecords;
+    const byStudent: Record<number, { present: number; total: number }> = {};
+    records.forEach((r) => {
+      const id = r.student;
+      if (!byStudent[id]) byStudent[id] = { present: 0, total: 0 };
+      byStudent[id].total++;
+      if (String(r.status).toLowerCase() === 'present') byStudent[id].present++;
+    });
+    const list = facultyScopedStudents;
+    const studentsWithPct = list.map((s) => {
+      const stat = byStudent[s.id] || { present: 0, total: 0 };
+      return stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
+    });
+    const buckets = [
+      { label: '90–100%', min: 90, max: 101, color: 'hsl(142, 76%, 36%)' },
+      { label: '75–90%', min: 75, max: 90, color: 'hsl(142, 56%, 51%)' },
+      { label: '50–75%', min: 50, max: 75, color: 'hsl(38, 92%, 50%)' },
+      { label: 'Below 50%', min: 0, max: 50, color: 'hsl(0, 84%, 60%)' },
+    ];
+    const counts = buckets.map((b) => studentsWithPct.filter((p) => p >= b.min && p < b.max).length);
+    const totalStudents = list.length;
+    return buckets
+      .map((b, i) => ({
+        name: b.label,
+        value: totalStudents > 0 ? Math.round((counts[i] / totalStudents) * 100) : 0,
+        color: b.color,
+      }))
+      .filter((d) => d.value > 0);
+  }, [facultyScopedRecords, facultyScopedStudents]);
+
   const handleFacultyChangePassword = async () => {
     if (facultyId == null) return;
     if (changePasswordForm.new_password !== changePasswordForm.confirm_password) {
@@ -471,11 +592,158 @@ export const FacultyLayout: React.FC = () => {
       <div className="p-4 sm:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6 flex flex-wrap gap-1.5 h-auto p-1.5 rounded-xl bg-muted/80">
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="attendance">Mark Attendance</TabsTrigger>
             <TabsTrigger value="student-attendance">Student Attendance</TabsTrigger>
             <TabsTrigger value="reports">My Reports</TabsTrigger>
             <TabsTrigger value="subjects">My Subjects</TabsTrigger>
           </TabsList>
+
+          {/* Dashboard — scoped to your branch(es), aligned with admin portal layout */}
+          <TabsContent value="dashboard" className="space-y-6 mt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-emerald-200/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">My students</CardTitle>
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                    <Users className="h-5 w-5 text-emerald-600" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{studentsLoading ? '…' : facultyScopedStudents.length}</div>
+                  <p className="text-xs text-muted-foreground">In your assigned branch(es)</p>
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-teal-200/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">My subjects</CardTitle>
+                  <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center">
+                    <BookOpen className="h-5 w-5 text-teal-600" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{subjectsAll.length}</div>
+                  <p className="text-xs text-muted-foreground">Across your departments</p>
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-cyan-200/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Attendance (your scope)</CardTitle>
+                  <div className="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center">
+                    <TrendingUp className="h-5 w-5 text-cyan-600" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {facultyDashboardMetrics.totalClasses > 0 ? `${facultyDashboardMetrics.attendancePercentage}%` : '—'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {facultyDashboardMetrics.totalClasses > 0
+                      ? `${facultyDashboardMetrics.presentCount} / ${facultyDashboardMetrics.totalClasses} records`
+                      : 'No attendance data yet for your students'}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-amber-200/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Defaulters</CardTitle>
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-amber-600">{facultyDashboardMetrics.defaultersCount}</div>
+                  <p className="text-xs text-muted-foreground">Your students below 85%</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button className="rounded-xl" onClick={() => setActiveTab('attendance')}>
+                <CalendarIcon className="w-4 h-4 mr-2" />
+                Mark attendance
+              </Button>
+              <Button variant="outline" className="rounded-xl" onClick={() => setActiveTab('student-attendance')}>
+                <Users className="w-4 h-4 mr-2" />
+                Student attendance table
+              </Button>
+              <Button variant="outline" className="rounded-xl" onClick={() => setActiveTab('reports')}>
+                <FileDown className="w-4 h-4 mr-2" />
+                Reports & upload
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Weekly attendance trend</CardTitle>
+                  <CardDescription>Average attendance % by weekday (your students only)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {facultyScopedRecords.length === 0 ? (
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No trend data yet</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={facultyWeeklyTrend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="attendance" fill="hsl(160 84% 39%)" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Attendance distribution</CardTitle>
+                  <CardDescription>Share of your students by attendance band</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {facultyDistributionPie.length === 0 || facultyScopedStudents.length === 0 ? (
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No distribution data yet</div>
+                  ) : (
+                    <>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={facultyDistributionPie}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={120}
+                            paddingAngle={5}
+                            dataKey="value"
+                          >
+                            {facultyDistributionPie.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="mt-4 space-y-2">
+                        {facultyDistributionPie.map((item, index) => (
+                          <div key={index} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center">
+                              <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: item.color }} />
+                              {item.name}
+                            </div>
+                            <span className="font-medium">{item.value}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
           {/* Attendance Tab */}
           <TabsContent value="attendance" className="space-y-6 mt-6">
