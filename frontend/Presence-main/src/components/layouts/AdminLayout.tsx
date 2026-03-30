@@ -56,6 +56,37 @@ import { apiUrl } from '@/lib/api';
 import { formatStudentSectionsDisplay, parseStudentSections, studentMatchesAnySection } from '@/lib/studentSections';
 import { aggregateAttendanceHoursByStudentSubject, ATTENDANCE_REPORT_CSV_HEADERS } from '@/lib/attendanceReportCsv';
 
+type AdminDefaulterStudent = {
+  id: number;
+  full_name?: string | null;
+  roll_number?: string | null;
+  username?: string;
+  department?: string | null;
+  year?: string | null;
+  section?: string | null;
+  sections?: string[];
+};
+
+function computeAdminDefaultersList(
+  list: AdminDefaulterStudent[],
+  records: Array<{ student: number; status: string }>,
+): Array<AdminDefaulterStudent & { attendancePercentage: number; presentClasses: number; totalClasses: number }> {
+  const byStudent: Record<number, { present: number; total: number }> = {};
+  records.forEach((r) => {
+    const id = r.student;
+    if (!byStudent[id]) byStudent[id] = { present: 0, total: 0 };
+    byStudent[id].total++;
+    if (String(r.status).toLowerCase() === 'present') byStudent[id].present++;
+  });
+  return list
+    .map((s) => {
+      const stat = byStudent[s.id] || { present: 0, total: 0 };
+      const pct = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
+      return { ...s, attendancePercentage: Math.round(pct * 100) / 100, presentClasses: stat.present, totalClasses: stat.total };
+    })
+    .filter((s) => s.attendancePercentage < 85);
+}
+
 export const AdminLayout: React.FC = () => {
   const { user, logout, updateSessionUser } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -758,13 +789,7 @@ export const AdminLayout: React.FC = () => {
         byStudent[id].total++;
         if (String(r.status).toLowerCase() === 'present') byStudent[id].present++;
       });
-      const defaultersList = list
-        .map((s: { id: number; full_name?: string | null; roll_number?: string | null; username?: string; department?: string | null; year?: string | null; section?: string | null; sections?: string[] }) => {
-          const stat = byStudent[s.id] || { present: 0, total: 0 };
-          const pct = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
-          return { ...s, attendancePercentage: Math.round(pct * 100) / 100, presentClasses: stat.present, totalClasses: stat.total };
-        })
-        .filter((s: { attendancePercentage: number }) => s.attendancePercentage < 85);
+      const defaultersList = computeAdminDefaultersList(list, records);
       setBackendDefaulters(defaultersList);
 
       // Weekly trend: average attendance % by day of week (Mon–Sun)
@@ -1203,6 +1228,73 @@ export const AdminLayout: React.FC = () => {
     }
     downloadCsv(`attendance_section_wise_${format(new Date(), 'yyyy-MM-dd')}.csv`, rows);
     toast({ title: 'Downloaded', description: 'Section-wise report downloaded.' });
+  };
+
+  const handleDownloadDefaultersReport = async () => {
+    try {
+      const [studentsRes, attRes] = await Promise.all([
+        fetch(apiUrl('/api/users/?role=student'), { credentials: 'include' }),
+        fetch(apiUrl('/api/attendance/'), { credentials: 'include' }),
+      ]);
+      const studentsList = studentsRes.ok ? await studentsRes.json() : [];
+      const attData = attRes.ok ? await attRes.json() : { records: [] };
+      const list = Array.isArray(studentsList) ? studentsList : [];
+      const records = Array.isArray(attData?.records) ? attData.records : [];
+      const defaultersList = computeAdminDefaultersList(list, records);
+      if (defaultersList.length === 0) {
+        toast({ title: 'No data', description: 'No defaulters found.', variant: 'destructive' });
+        return;
+      }
+      const rows: string[][] = [
+        ['Roll Number', 'Name', 'Year', 'Branch', 'Section', 'Attendance %', 'Present Classes', 'Total Classes', 'Status'],
+      ];
+      defaultersList.forEach((student) => {
+        rows.push([
+          student.roll_number ?? '',
+          student.full_name ?? '',
+          student.year?.trim() ? student.year : '',
+          student.department ?? '',
+          formatStudentSectionsDisplay(student).replace(/^–$/, '') || '',
+          String(student.attendancePercentage),
+          String(student.presentClasses),
+          String(student.totalClasses),
+          'Warning Sent',
+        ]);
+      });
+      downloadCsv(`defaulters_${format(new Date(), 'yyyy-MM-dd')}.csv`, rows);
+      toast({ title: 'Downloaded', description: 'Defaulters list downloaded.' });
+    } catch {
+      toast({ title: 'Download failed', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
+  const handleDownloadDefaultersFromTab = () => {
+    if (defaultersToShow.length === 0) {
+      toast({
+        title: 'No data',
+        description: backendDefaulters.length === 0 ? 'No defaulters found.' : 'No students match your search.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const rows: string[][] = [
+      ['Roll Number', 'Name', 'Year', 'Branch', 'Section', 'Attendance %', 'Present Classes', 'Total Classes', 'Status'],
+    ];
+    defaultersToShow.forEach((student) => {
+      rows.push([
+        student.roll_number ?? '',
+        student.full_name ?? '',
+        student.year?.trim() ? student.year : '',
+        student.department ?? '',
+        formatStudentSectionsDisplay(student).replace(/^–$/, '') || '',
+        String(student.attendancePercentage),
+        String(student.presentClasses),
+        String(student.totalClasses),
+        'Warning Sent',
+      ]);
+    });
+    downloadCsv(`defaulters_${format(new Date(), 'yyyy-MM-dd')}.csv`, rows);
+    toast({ title: 'Downloaded', description: 'Defaulters list downloaded.' });
   };
 
   // Admin Profile
@@ -3604,11 +3696,11 @@ export const AdminLayout: React.FC = () => {
                         <div className="text-sm text-muted-foreground">Same columns, sorted by section (CSV)</div>
                       </div>
                     </Button>
-                    <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={() => setActiveTab('defaulters')}>
+                    <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={handleDownloadDefaultersReport}>
                       <Download className="w-5 h-5 mb-2 self-center" />
                       <div className="text-left">
                         <div className="font-medium">Defaulters List</div>
-                        <div className="text-sm text-muted-foreground">Students below 85%</div>
+                        <div className="text-sm text-muted-foreground">Download CSV — students below 85% attendance</div>
                       </div>
                     </Button>
                   </div>
@@ -3635,9 +3727,15 @@ export const AdminLayout: React.FC = () => {
           {/* Defaulters Tab */}
           <TabsContent value="defaulters">
             <Card>
-              <CardHeader>
-                <CardTitle>Attendance Defaulters</CardTitle>
-                <CardDescription>Students with less than 85% attendance</CardDescription>
+              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+                <div>
+                  <CardTitle>Attendance Defaulters</CardTitle>
+                  <CardDescription>Students with less than 85% attendance. Download respects the search box below.</CardDescription>
+                </div>
+                <Button variant="outline" className="shrink-0 rounded-xl" onClick={handleDownloadDefaultersFromTab}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Download CSV
+                </Button>
               </CardHeader>
               <CardContent>
                 <div className="relative max-w-md mb-4">
