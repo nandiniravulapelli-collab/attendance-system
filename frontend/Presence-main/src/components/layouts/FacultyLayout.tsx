@@ -38,6 +38,8 @@ import {
   TrendingUp,
   AlertTriangle,
   FileDown,
+  Edit,
+  UserCircle,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -49,8 +51,10 @@ import { formatStudentSectionsDisplay, studentMatchesAnySection } from '@/lib/st
 
 type ApiSubject = { id: number; name: string; code: string; department_code: string; year?: string; semester?: string };
 
+const SAT_YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
+
 export const FacultyLayout: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateSessionUser } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedBranches, setSelectedBranches] = useState<string[]>(['__all__']);
@@ -69,6 +73,22 @@ export const FacultyLayout: React.FC = () => {
   const [isUploadingAttendance, setIsUploadingAttendance] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [changePasswordForm, setChangePasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
+  const [apiProfile, setApiProfile] = useState<{
+    full_name?: string | null;
+    phone?: string | null;
+    username?: string | null;
+    email?: string | null;
+    departments?: string[];
+    subjects?: string[];
+  } | null>(null);
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [profileEditForm, setProfileEditForm] = useState({ full_name: '', phone: '', username: '', email: '' });
+
+  /** Student Attendance tab — multi-select filters (independent from Mark Attendance) */
+  const [satSelectedBranches, setSatSelectedBranches] = useState<string[]>(['__all__']);
+  const [satSelectedYears, setSatSelectedYears] = useState<string[]>([]);
+  const [satSelectedSections, setSatSelectedSections] = useState<string[]>([]);
+  const [satSelectedSubjectIds, setSatSelectedSubjectIds] = useState<string[]>([]);
 
   const facultyId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
 
@@ -94,6 +114,47 @@ export const FacultyLayout: React.FC = () => {
     ? subjectsByBranch.filter((s: { semester?: string }) => String(s.semester ?? '1') === selectedSemester)
     : subjectsByBranch;
   const facultyBranchOptions = apiDepartments.filter((d: { code: string }) => facultyDeptCodes.includes(d.code));
+
+  const satBranchCodes = useMemo(() => {
+    if (satSelectedBranches.includes('__all__') || satSelectedBranches.length === 0) return facultyDeptCodes;
+    return satSelectedBranches.filter((b) => b !== '__all__');
+  }, [satSelectedBranches, facultyDeptCodes.join(',')]);
+
+  const satSubjectOptions = useMemo(() => {
+    return subjectsAll.filter((s) => {
+      if (satBranchCodes.length > 0 && !satBranchCodes.includes(s.department_code ?? '')) return false;
+      if (satSelectedYears.length > 0 && !satSelectedYears.includes(String(s.year ?? '1'))) return false;
+      return true;
+    });
+  }, [subjectsAll, satBranchCodes.join(','), satSelectedYears.join(',')]);
+
+  const satSubjectsForColumns = useMemo(() => {
+    if (satSelectedSubjectIds.length === 0) return satSubjectOptions;
+    const idSet = new Set(satSelectedSubjectIds);
+    return satSubjectOptions.filter((s) => idSet.has(String(s.id)));
+  }, [satSubjectOptions, satSelectedSubjectIds.join(',')]);
+
+  const satStudentsRows = useMemo(() => {
+    return apiStudents
+      .filter((s) => !s.is_detained)
+      .filter((s) => facultyDeptCodes.length === 0 || facultyDeptCodes.includes(s.department ?? ''))
+      .filter((s) => satBranchCodes.length === 0 || satBranchCodes.includes(s.department ?? ''))
+      .filter((s) => {
+        if (satSelectedYears.length === 0) return true;
+        const y = (s.year ?? '').toString().trim();
+        return satSelectedYears.includes(y);
+      })
+      .filter((s) => satSelectedSections.length === 0 || studentMatchesAnySection(s, satSelectedSections))
+      .map((s) => ({
+        id: String(s.id),
+        name: s.full_name || s.roll_number || '',
+        rollNumber: s.roll_number || '',
+        email: s.email,
+        departmentId: s.department || '',
+        section: s.section || '',
+        year: s.year ? Number(s.year) : 0,
+      }));
+  }, [apiStudents, facultyDeptCodes.join(','), satBranchCodes.join(','), satSelectedYears.join(','), satSelectedSections.join(',')]);
 
   useEffect(() => {
     fetch(apiUrl('/api/subjects/'), { credentials: 'include' })
@@ -129,14 +190,19 @@ export const FacultyLayout: React.FC = () => {
     }
     setStudentsLoading(true);
     const params = new URLSearchParams({ role: 'student' });
-    if (selectedBranchCodes.length === 1) params.set('department', selectedBranchCodes[0]);
-    if (selectedYear && selectedYear !== '__all__') params.set('year', selectedYear);
+    if (activeTab === 'student-attendance') {
+      if (satBranchCodes.length === 1) params.set('department', satBranchCodes[0]);
+      if (satSelectedYears.length === 1) params.set('year', satSelectedYears[0]);
+    } else {
+      if (selectedBranchCodes.length === 1) params.set('department', selectedBranchCodes[0]);
+      if (selectedYear && selectedYear !== '__all__') params.set('year', selectedYear);
+    }
     fetch(apiUrl(`/api/users/?${params}`), { credentials: 'include' })
       .then(res => res.ok ? res.json() : [])
       .then((data: unknown) => setApiStudents(Array.isArray(data) ? data : []))
       .catch(() => setApiStudents([]))
       .finally(() => setStudentsLoading(false));
-  }, [facultyDeptCodes.length, selectedBranchCodes.join(','), selectedYear]);
+  }, [facultyDeptCodes.length, activeTab, selectedBranchCodes.join(','), selectedYear, satBranchCodes.join(','), satSelectedYears.join(',')]);
 
   useEffect(() => {
     if (user?.role !== 'faculty' && user?.role !== 'admin') return;
@@ -528,6 +594,58 @@ export const FacultyLayout: React.FC = () => {
       .filter((d) => d.value > 0);
   }, [facultyScopedRecords, facultyScopedStudents]);
 
+  useEffect(() => {
+    if (facultyId == null || activeTab !== 'profile') return;
+    fetch(apiUrl(`/api/users/${facultyId}/`), { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setApiProfile(data))
+      .catch(() => setApiProfile(null));
+  }, [facultyId, activeTab]);
+
+  useEffect(() => {
+    if (apiProfile) {
+      setProfileEditForm({
+        full_name: apiProfile.full_name || '',
+        phone: apiProfile.phone || '',
+        username: apiProfile.username || '',
+        email: apiProfile.email || user?.email || '',
+      });
+    }
+  }, [apiProfile, user?.email]);
+
+  const handleSaveProfile = async () => {
+    if (facultyId == null) return;
+    try {
+      const res = await fetch(apiUrl(`/api/users/${facultyId}/`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          full_name: profileEditForm.full_name,
+          phone: profileEditForm.phone,
+          username: profileEditForm.username || undefined,
+          email: profileEditForm.email.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setApiProfile((prev) => (prev ? { ...prev, ...updated } : null));
+        updateSessionUser({
+          email: typeof updated.email === 'string' ? updated.email : profileEditForm.email.trim(),
+          name: typeof updated.full_name === 'string' ? updated.full_name : profileEditForm.full_name,
+        });
+        setProfileEditOpen(false);
+        toast({ title: 'Profile updated', description: 'Your details have been saved.' });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const msg = typeof err.detail === 'string' ? err.detail : 'Please try again.';
+        toast({ title: 'Update failed', description: msg, variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Update failed', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
   const handleFacultyChangePassword = async () => {
     if (facultyId == null) return;
     if (changePasswordForm.new_password !== changePasswordForm.confirm_password) {
@@ -597,6 +715,7 @@ export const FacultyLayout: React.FC = () => {
             <TabsTrigger value="student-attendance">Student Attendance</TabsTrigger>
             <TabsTrigger value="reports">My Reports</TabsTrigger>
             <TabsTrigger value="subjects">My Subjects</TabsTrigger>
+            <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
           {/* Dashboard — scoped to your branch(es), aligned with admin portal layout */}
@@ -1129,11 +1248,210 @@ export const FacultyLayout: React.FC = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Student Attendance by Subject</CardTitle>
-                <CardDescription>Subject-wise percentage for each student and overall across all subjects. Data from your marked attendance.</CardDescription>
+                <CardDescription>
+                  Filter by branch, year, section, and subject (multi-select). Overall % counts only the subjects shown in the table.
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                {studentsInSection.length === 0 ? (
-                  <p className="text-muted-foreground">Select a section in Mark Attendance to see students here, or ensure students are registered in your class and branch.</p>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label>Branch</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {satSelectedBranches.includes('__all__') || satSelectedBranches.length === 0
+                            ? 'All branches'
+                            : satSelectedBranches.filter((b) => b !== '__all__').length > 0
+                              ? `${satSelectedBranches.filter((b) => b !== '__all__').length} selected`
+                              : 'Select branch(es)'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedBranches(['__all__']); setSatSelectedSubjectIds([]); }}>All</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedBranches([]); setSatSelectedSubjectIds([]); }}>Clear</Button>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Checkbox
+                            id="sat-branch-all"
+                            checked={satSelectedBranches.includes('__all__') || satSelectedBranches.length === 0}
+                            onCheckedChange={(c) => {
+                              if (c) setSatSelectedBranches(['__all__']);
+                              else setSatSelectedBranches([]);
+                              setSatSelectedSubjectIds([]);
+                            }}
+                          />
+                          <label htmlFor="sat-branch-all" className="text-sm font-medium cursor-pointer">All branches</label>
+                        </div>
+                        {facultyBranchOptions.map((d: { id: number; code: string; name: string }) => (
+                          <div key={d.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`sat-branch-${d.id}`}
+                              checked={satSelectedBranches.includes('__all__') || satSelectedBranches.includes(d.code)}
+                              onCheckedChange={(checked) => {
+                                const current = satSelectedBranches.includes('__all__') ? [] : satSelectedBranches.filter((b) => b !== '__all__');
+                                const next = checked ? [...current, d.code] : current.filter((v) => v !== d.code);
+                                setSatSelectedBranches(next);
+                                setSatSelectedSubjectIds([]);
+                              }}
+                            />
+                            <label htmlFor={`sat-branch-${d.id}`} className="text-sm cursor-pointer">{d.code} – {d.name}</label>
+                          </div>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Year</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {satSelectedYears.length === 0 ? 'All years' : `${satSelectedYears.length} selected`}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-56 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedYears([...SAT_YEAR_OPTIONS]); setSatSelectedSubjectIds([]); }}>All</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { setSatSelectedYears([]); setSatSelectedSubjectIds([]); }}>Clear</Button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {SAT_YEAR_OPTIONS.map((y) => (
+                            <div key={y} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`sat-year-${y}`}
+                                checked={satSelectedYears.includes(y)}
+                                onCheckedChange={(checked) => {
+                                  setSatSelectedYears((prev) => {
+                                    const next = checked ? [...prev, y] : prev.filter((v) => v !== y);
+                                    return next;
+                                  });
+                                  setSatSelectedSubjectIds([]);
+                                }}
+                              />
+                              <label htmlFor={`sat-year-${y}`} className="text-sm cursor-pointer">Year {y}</label>
+                            </div>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Section</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {satSelectedSections.length === 0 ? 'All sections' : `${satSelectedSections.length} selected`}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setSatSelectedSections((apiSections || []).map((s) => s.name))}>All</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setSatSelectedSections([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {(apiSections || []).length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No sections defined.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {(apiSections || []).map((s: { id: number; name: string }) => (
+                              <div key={s.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`sat-sec-${s.id}`}
+                                  checked={satSelectedSections.includes(s.name)}
+                                  onCheckedChange={(checked) => {
+                                    setSatSelectedSections((prev) =>
+                                      checked ? [...prev, s.name] : prev.filter((v) => v !== s.name),
+                                    );
+                                  }}
+                                />
+                                <label htmlFor={`sat-sec-${s.id}`} className="text-sm cursor-pointer">{s.name}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Subject</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {satSelectedSubjectIds.length === 0 ? 'All subjects (in scope)' : `${satSelectedSubjectIds.length} selected`}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2"
+                              onClick={() => setSatSelectedSubjectIds(satSubjectOptions.map((s) => String(s.id)))}
+                            >
+                              All
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setSatSelectedSubjectIds([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {satSubjectOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No subjects for current branch/year filters.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {satSubjectOptions.map((subject) => {
+                              const id = String(subject.id);
+                              const allIds = satSubjectOptions.map((s) => String(s.id));
+                              const checked =
+                                satSelectedSubjectIds.length === 0 || satSelectedSubjectIds.includes(id);
+                              return (
+                                <div key={id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`sat-subj-${id}`}
+                                    checked={checked}
+                                    onCheckedChange={(isChecked) => {
+                                      if (satSelectedSubjectIds.length === 0) {
+                                        if (!isChecked) setSatSelectedSubjectIds(allIds.filter((x) => x !== id));
+                                        return;
+                                      }
+                                      if (isChecked) {
+                                        const next = [...satSelectedSubjectIds, id];
+                                        setSatSelectedSubjectIds(next.length >= allIds.length ? [] : next);
+                                      } else {
+                                        setSatSelectedSubjectIds(satSelectedSubjectIds.filter((v) => v !== id));
+                                      }
+                                    }}
+                                  />
+                                  <label htmlFor={`sat-subj-${id}`} className="text-sm cursor-pointer">
+                                    {subject.name} ({subject.code})
+                                  </label>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+
+                {studentsLoading ? (
+                  <p className="text-muted-foreground">Loading students…</p>
+                ) : satSubjectsForColumns.length === 0 ? (
+                  <p className="text-muted-foreground">No subjects match the filters. Adjust branch or year, or clear subject filters.</p>
+                ) : satStudentsRows.length === 0 ? (
+                  <p className="text-muted-foreground">No students match the selected filters.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -1141,33 +1459,43 @@ export const FacultyLayout: React.FC = () => {
                         <tr className="border-b">
                           <th className="text-left p-2 font-medium">Student</th>
                           <th className="text-left p-2 font-medium">Roll No</th>
-                          {subjects.map((sub: { id: string | number; code: string }) => (
+                          {satSubjectsForColumns.map((sub: { id: string | number; code: string }) => (
                             <th key={String(sub.id)} className="text-left p-2 font-medium">{sub.code} %</th>
                           ))}
                           <th className="text-left p-2 font-medium">Overall %</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {studentsInSection.map(student => {
+                        {satStudentsRows.map((student) => {
                           const sid = Number(student.id) || student.id;
                           const bySubject: Record<string, { present: number; total: number }> = {};
-                          subjects.forEach((sub: { code: string; name?: string }) => { bySubject[sub.code] = { present: 0, total: 0 }; });
-                          let totalAll = 0, presentAll = 0;
-                          attendanceRecords.filter(r => String(r.student) === String(sid)).forEach(r => {
+                          satSubjectsForColumns.forEach((sub: { code: string }) => {
+                            bySubject[sub.code] = { present: 0, total: 0 };
+                          });
+                          let totalAll = 0;
+                          let presentAll = 0;
+                          attendanceRecords.filter((r) => String(r.student) === String(sid)).forEach((r) => {
                             const present = r.status?.toLowerCase() === 'present';
-                            const subjectCode = subjects.find((sub: { code: string; name?: string }) => sub.code === r.subject || sub.name === r.subject)?.code ?? r.subject;
-                            if (bySubject[subjectCode]) {
-                              bySubject[subjectCode].total++;
-                              if (present) bySubject[subjectCode].present++;
+                            const rSub = (r.subject ?? '').trim();
+                            const match = satSubjectsForColumns.find(
+                              (sub: { code: string; name?: string }) =>
+                                sub.code === rSub ||
+                                sub.name === rSub ||
+                                String(sub.code).toLowerCase() === rSub.toLowerCase() ||
+                                String(sub.name ?? '').toLowerCase() === rSub.toLowerCase(),
+                            );
+                            if (match && bySubject[match.code]) {
+                              bySubject[match.code].total++;
+                              if (present) bySubject[match.code].present++;
+                              totalAll++;
+                              if (present) presentAll++;
                             }
-                            totalAll++;
-                            if (present) presentAll++;
                           });
                           return (
                             <tr key={student.id} className="border-b">
                               <td className="p-2">{student.name}</td>
                               <td className="p-2 font-mono">{student.rollNumber}</td>
-                              {subjects.map((sub: { id: string | number; code: string }) => {
+                              {satSubjectsForColumns.map((sub: { id: string | number; code: string }) => {
                                 const s = bySubject[sub.code];
                                 const pct = s && s.total > 0 ? Math.round((s.present / s.total) * 100) : '–';
                                 return <td key={String(sub.id)} className="p-2">{pct}</td>;
@@ -1299,8 +1627,131 @@ export const FacultyLayout: React.FC = () => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Profile */}
+          <TabsContent value="profile" className="space-y-6 mt-6">
+            <Card className="border-emerald-200/50">
+              <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                    <UserCircle className="w-7 h-7 text-emerald-600" />
+                  </div>
+                  <div>
+                    <CardTitle>Profile</CardTitle>
+                    <CardDescription>Your faculty account. Assigned subjects are managed by admin.</CardDescription>
+                  </div>
+                </div>
+                {facultyId != null && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    onClick={() => {
+                      setProfileEditForm({
+                        full_name: apiProfile?.full_name || '',
+                        phone: apiProfile?.phone || '',
+                        username: apiProfile?.username || '',
+                        email: apiProfile?.email || user?.email || '',
+                      });
+                      setProfileEditOpen(true);
+                    }}
+                  >
+                    <Edit className="w-4 h-4 mr-2" /> Edit
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm text-muted-foreground">Username</label>
+                    <p className="font-medium">{apiProfile?.username ?? '–'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Email</label>
+                    <p className="font-medium">{apiProfile?.email ?? user?.email ?? '–'}</p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-sm text-muted-foreground">Full name</label>
+                    <p className="font-medium">{apiProfile?.full_name ?? user?.name ?? '–'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Phone</label>
+                    <p className="font-medium">{apiProfile?.phone ?? '–'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Branch(es)</label>
+                    <p className="font-medium">
+                      {apiProfile?.departments?.length
+                        ? apiProfile.departments.join(', ')
+                        : facultyDeptCodes.length
+                          ? facultyDeptCodes.join(', ')
+                          : '–'}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-sm text-muted-foreground">Assigned subjects (IDs/codes)</label>
+                    <p className="font-medium text-sm leading-relaxed">
+                      {apiProfile?.subjects?.length ? apiProfile.subjects.join(', ') : '–'}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={profileEditOpen} onOpenChange={setProfileEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit profile</DialogTitle>
+            <DialogDescription>Update your username, email, name, and phone.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Username</Label>
+              <Input
+                value={profileEditForm.username}
+                onChange={(e) => setProfileEditForm((f) => ({ ...f, username: e.target.value.trim() }))}
+                placeholder="Username (login)"
+                autoComplete="username"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={profileEditForm.email}
+                onChange={(e) => setProfileEditForm((f) => ({ ...f, email: e.target.value.trim() }))}
+                placeholder="Email"
+                autoComplete="email"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Full name</Label>
+              <Input
+                value={profileEditForm.full_name}
+                onChange={(e) => setProfileEditForm((f) => ({ ...f, full_name: e.target.value }))}
+                placeholder="Full name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Phone</Label>
+              <Input
+                value={profileEditForm.phone}
+                onChange={(e) => setProfileEditForm((f) => ({ ...f, phone: e.target.value }))}
+                placeholder="Phone"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProfileEditOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveProfile} className="rounded-xl">
+              <Save className="w-4 h-4 mr-2" /> Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
         <DialogContent className="sm:max-w-md">

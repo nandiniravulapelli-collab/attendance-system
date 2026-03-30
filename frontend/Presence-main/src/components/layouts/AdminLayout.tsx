@@ -56,7 +56,7 @@ import { apiUrl } from '@/lib/api';
 import { formatStudentSectionsDisplay, parseStudentSections, studentMatchesAnySection } from '@/lib/studentSections';
 
 export const AdminLayout: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateSessionUser } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isImporting, setIsImporting] = useState(false);
   const [isFacultyDialogOpen, setIsFacultyDialogOpen] = useState(false);
@@ -100,6 +100,7 @@ export const AdminLayout: React.FC = () => {
   const [studentEditForm, setStudentEditForm] = useState({
     full_name: '',
     roll_number: '',
+    email: '',
     phone: '',
     department: '',
     sections: [] as string[],
@@ -322,6 +323,7 @@ export const AdminLayout: React.FC = () => {
     setStudentEditForm({
       full_name: s.full_name || '',
       roll_number: s.roll_number || '',
+      email: s.email || '',
       phone: s.phone || '',
       department: s.department || '',
       sections: parseStudentSections(s),
@@ -1166,9 +1168,9 @@ export const AdminLayout: React.FC = () => {
 
   // Admin Profile
   const adminId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
-  const [apiProfile, setApiProfile] = useState<{ full_name?: string | null; phone?: string | null; username?: string | null } | null>(null);
+  const [apiProfile, setApiProfile] = useState<{ full_name?: string | null; phone?: string | null; username?: string | null; email?: string | null } | null>(null);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
-  const [profileEditForm, setProfileEditForm] = useState({ full_name: '', phone: '', username: '' });
+  const [profileEditForm, setProfileEditForm] = useState({ full_name: '', phone: '', username: '', email: '' });
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [changePasswordForm, setChangePasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
 
@@ -1182,9 +1184,14 @@ export const AdminLayout: React.FC = () => {
 
   useEffect(() => {
     if (apiProfile) {
-      setProfileEditForm({ full_name: apiProfile.full_name || '', phone: apiProfile.phone || '', username: apiProfile.username || '' });
+      setProfileEditForm({
+        full_name: apiProfile.full_name || '',
+        phone: apiProfile.phone || '',
+        username: apiProfile.username || '',
+        email: apiProfile.email || user?.email || '',
+      });
     }
-  }, [apiProfile]);
+  }, [apiProfile, user?.email]);
 
   const handleSaveProfile = async () => {
     if (adminId == null) return;
@@ -1193,11 +1200,20 @@ export const AdminLayout: React.FC = () => {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ full_name: profileEditForm.full_name, phone: profileEditForm.phone, username: profileEditForm.username || undefined })
+        body: JSON.stringify({
+          full_name: profileEditForm.full_name,
+          phone: profileEditForm.phone,
+          username: profileEditForm.username || undefined,
+          email: profileEditForm.email.trim() || undefined,
+        })
       });
       if (res.ok) {
         const updated = await res.json();
         setApiProfile(prev => prev ? { ...prev, ...updated } : null);
+        updateSessionUser({
+          email: typeof updated.email === 'string' ? updated.email : profileEditForm.email.trim(),
+          name: typeof updated.full_name === 'string' ? updated.full_name : profileEditForm.full_name,
+        });
         setProfileEditOpen(false);
         toast({ title: 'Profile updated', description: 'Your details have been saved.' });
       } else {
@@ -1907,7 +1923,7 @@ export const AdminLayout: React.FC = () => {
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Edit student details</DialogTitle>
-                  <DialogDescription>Update name, roll number, phone, department, section(s), and year.</DialogDescription>
+                  <DialogDescription>Update name, roll number, email, phone, department, section(s), and year.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
@@ -1924,6 +1940,15 @@ export const AdminLayout: React.FC = () => {
                       value={studentEditForm.roll_number}
                       onChange={e => setStudentEditForm(f => ({ ...f, roll_number: e.target.value }))}
                       placeholder="Roll number"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      value={studentEditForm.email}
+                      onChange={e => setStudentEditForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="Email"
                     />
                   </div>
                   <div className="grid gap-2">
@@ -3446,7 +3471,7 @@ export const AdminLayout: React.FC = () => {
                   <CardDescription>Your admin account details</CardDescription>
                 </div>
                 {adminId != null && (
-                  <Button variant="outline" size="sm" onClick={() => { setProfileEditForm({ full_name: apiProfile?.full_name || '', phone: apiProfile?.phone || '', username: apiProfile?.username || '' }); setProfileEditOpen(true); }}>
+                  <Button variant="outline" size="sm" onClick={() => { setProfileEditForm({ full_name: apiProfile?.full_name || '', phone: apiProfile?.phone || '', username: apiProfile?.username || '', email: apiProfile?.email || user?.email || '' }); setProfileEditOpen(true); }}>
                     <Edit className="w-4 h-4 mr-2" /> Edit
                   </Button>
                 )}
@@ -3463,7 +3488,7 @@ export const AdminLayout: React.FC = () => {
                   </div>
                   <div>
                     <label className="text-sm text-muted-foreground">Email</label>
-                    <p className="font-medium">{user?.email ?? '–'}</p>
+                    <p className="font-medium">{apiProfile?.email ?? user?.email ?? '–'}</p>
                   </div>
                   <div>
                     <label className="text-sm text-muted-foreground">Phone</label>
@@ -3480,12 +3505,16 @@ export const AdminLayout: React.FC = () => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit profile</DialogTitle>
-            <DialogDescription>Update your username, name and phone.</DialogDescription>
+            <DialogDescription>Update your username, email, name and phone.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Username</Label>
               <Input value={profileEditForm.username} onChange={e => setProfileEditForm(f => ({ ...f, username: e.target.value.trim() }))} placeholder="Username (for login display)" autoComplete="username" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Email</Label>
+              <Input type="email" value={profileEditForm.email} onChange={e => setProfileEditForm(f => ({ ...f, email: e.target.value.trim() }))} placeholder="Email" autoComplete="email" />
             </div>
             <div className="grid gap-2">
               <Label>Full name</Label>

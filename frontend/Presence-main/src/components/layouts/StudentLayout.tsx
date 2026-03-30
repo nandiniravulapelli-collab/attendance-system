@@ -45,7 +45,7 @@ import { formatStudentSectionsDisplay, parseStudentSections } from '@/lib/studen
 import { format, parseISO } from 'date-fns';
 
 export const StudentLayout: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateSessionUser } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [apiProfile, setApiProfile] = useState<{
     full_name: string | null;
@@ -62,6 +62,7 @@ export const StudentLayout: React.FC = () => {
   const [profileEditForm, setProfileEditForm] = useState({
     full_name: '',
     roll_number: '',
+    email: '',
     phone: '',
     department: '',
     sections: [] as string[],
@@ -124,6 +125,7 @@ export const StudentLayout: React.FC = () => {
       setProfileEditForm({
         full_name: profile.full_name || '',
         roll_number: profile.roll_number || '',
+        email: profile.email || user?.email || '',
         phone: profile.phone || '',
         department: profile.department || '',
         sections: parseStudentSections(profile),
@@ -143,6 +145,7 @@ export const StudentLayout: React.FC = () => {
         body: JSON.stringify({
           full_name: profileEditForm.full_name,
           roll_number: profileEditForm.roll_number,
+          email: profileEditForm.email.trim() || undefined,
           phone: profileEditForm.phone,
           department: profileEditForm.department,
           year: profileEditForm.year,
@@ -152,6 +155,10 @@ export const StudentLayout: React.FC = () => {
       if (res.ok) {
         const updated = await res.json();
         setApiProfile(prev => prev ? { ...prev, ...updated } : null);
+        updateSessionUser({
+          email: typeof updated.email === 'string' ? updated.email : profileEditForm.email.trim(),
+          name: typeof updated.full_name === 'string' ? updated.full_name : profileEditForm.full_name,
+        });
         setProfileEditOpen(false);
         toast({ title: 'Profile updated', description: 'Your details have been saved.' });
       } else {
@@ -769,7 +776,7 @@ export const StudentLayout: React.FC = () => {
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Edit your details</DialogTitle>
-                  <DialogDescription>Update your name, roll number, phone, department, section(s), and year.</DialogDescription>
+                  <DialogDescription>Update your name, roll number, email, phone, department, section(s), and year.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
@@ -779,6 +786,10 @@ export const StudentLayout: React.FC = () => {
                   <div className="grid gap-2">
                     <Label>Roll number</Label>
                     <Input value={profileEditForm.roll_number} onChange={e => setProfileEditForm(f => ({ ...f, roll_number: e.target.value }))} placeholder="Roll number" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Email</Label>
+                    <Input type="email" value={profileEditForm.email} onChange={e => setProfileEditForm(f => ({ ...f, email: e.target.value.trim() }))} placeholder="Email" autoComplete="email" />
                   </div>
                   <div className="grid gap-2">
                     <Label>Phone</Label>

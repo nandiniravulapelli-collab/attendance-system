@@ -20,6 +20,8 @@ interface AuthContextType {
   ) => Promise<{ success: true } | { success: false; error: string }>;
   logout: () => void;
   switchRole: (role: "admin" | "faculty" | "student") => void;
+  /** Merge into the logged-in session (e.g. after profile email/name update). */
+  updateSessionUser: (updates: Partial<Pick<User, "email" | "name">>) => void;
   isLoading: boolean;
 }
 
@@ -110,6 +112,15 @@ function getFirstError(data: Record<string, unknown>): string {
     localStorage.removeItem("attendanceUser");
   };
 
+  const updateSessionUser = (updates: Partial<Pick<User, "email" | "name">>) => {
+    setUser((prev) => {
+      if (!prev) return null;
+      const next = { ...prev, ...updates };
+      localStorage.setItem("attendanceUser", JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Temporary demo role switch (optional)
   const switchRole = (role: "admin" | "faculty" | "student") => {
     let demoUser: User;
@@ -151,6 +162,7 @@ function getFirstError(data: Record<string, unknown>): string {
     login,
     logout,
     switchRole,
+    updateSessionUser,
     isLoading,
   };
 

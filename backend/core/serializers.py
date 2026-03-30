@@ -86,7 +86,7 @@ class UserSerializer(serializers.ModelSerializer):
             'is_detained',
             'assigned_subject_ids', 'subjects'
         )
-        read_only_fields = ('id', 'username', 'email', 'role')
+        read_only_fields = ('id', 'username', 'role')
         extra_kwargs = {'assigned_subject_ids': {'required': False}, 'is_detained': {'required': False}}
 
     def get_departments(self, obj):
@@ -104,7 +104,7 @@ class UserSerializer(serializers.ModelSerializer):
         return [x.strip() for x in s.split(',') if x.strip()] if s else []
 
     def update(self, instance, validated_data):
-        # Don't allow changing username/email/role via this serializer
+        # Username/role are read-only on the serializer; email may be updated by allowed users.
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
