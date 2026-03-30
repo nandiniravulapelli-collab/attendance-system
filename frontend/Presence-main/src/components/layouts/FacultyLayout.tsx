@@ -48,6 +48,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { formatStudentSectionsDisplay, studentMatchesAnySection } from '@/lib/studentSections';
+import { aggregateAttendanceHoursByStudentSubject, ATTENDANCE_REPORT_CSV_HEADERS } from '@/lib/attendanceReportCsv';
 
 type ApiSubject = { id: number; name: string; code: string; department_code: string; year?: string; semester?: string };
 
@@ -396,7 +397,18 @@ export const FacultyLayout: React.FC = () => {
 
   const stats = getAttendanceStats();
 
-  const studentIdToInfo = Object.fromEntries(apiStudents.map(s => [s.id, { name: s.full_name || s.roll_number || '', roll: s.roll_number || '', section: formatStudentSectionsDisplay(s).replace(/^–$/, '') }]));
+  const studentIdToInfo = Object.fromEntries(
+    apiStudents.map((s) => [
+      s.id,
+      {
+        name: s.full_name || s.roll_number || '',
+        roll: s.roll_number || '',
+        branch: s.department || '',
+        year: (s.year ?? '').toString(),
+        section: formatStudentSectionsDisplay(s).replace(/^–$/, ''),
+      },
+    ]),
+  );
 
   const downloadCsv = (filename: string, rows: string[][]) => {
     const header = rows[0];
@@ -411,17 +423,31 @@ export const FacultyLayout: React.FC = () => {
   };
 
   const handleDownloadSubjectWise = () => {
-    const rows: string[][] = [['Subject', 'Date', 'Roll No', 'Student Name', 'Section', 'Status']];
-    const sorted = [...attendanceRecords].sort((a, b) => (a.subject || '').localeCompare(b.subject || '') || (a.date || '').localeCompare(b.date || ''));
-    sorted.forEach(r => {
-      const info = studentIdToInfo[r.student];
+    const agg = aggregateAttendanceHoursByStudentSubject(attendanceRecords);
+    const rows: string[][] = [[...ATTENDANCE_REPORT_CSV_HEADERS]];
+    const enriched = agg
+      .map((a) => {
+        const info = studentIdToInfo[a.studentId];
+        if (!info) return null;
+        return { ...a, info };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    enriched.sort(
+      (a, b) =>
+        a.subject.localeCompare(b.subject) ||
+        (a.info.roll || '').localeCompare(b.info.roll || '') ||
+        (a.info.name || '').localeCompare(b.info.name || ''),
+    );
+    enriched.forEach((a) => {
       rows.push([
-        r.subject || '',
-        r.date || '',
-        info?.roll ?? '',
-        info?.name ?? '',
-        info?.section ?? '',
-        r.status || ''
+        a.info.roll ?? '',
+        a.info.name ?? '',
+        a.info.branch ?? '',
+        a.info.year ?? '',
+        a.info.section ?? '',
+        a.subject,
+        String(a.attended),
+        String(a.total),
       ]);
     });
     if (rows.length <= 1) {
@@ -433,21 +459,31 @@ export const FacultyLayout: React.FC = () => {
   };
 
   const handleDownloadSectionWise = () => {
-    const rows: string[][] = [['Section', 'Subject', 'Date', 'Roll No', 'Student Name', 'Status']];
-    const sorted = [...attendanceRecords].sort((a, b) => {
-      const secA = studentIdToInfo[a.student]?.section ?? '';
-      const secB = studentIdToInfo[b.student]?.section ?? '';
-      return secA.localeCompare(secB) || (a.date || '').localeCompare(b.date || '') || (a.subject || '').localeCompare(b.subject || '');
-    });
-    sorted.forEach(r => {
-      const info = studentIdToInfo[r.student];
+    const agg = aggregateAttendanceHoursByStudentSubject(attendanceRecords);
+    const rows: string[][] = [[...ATTENDANCE_REPORT_CSV_HEADERS]];
+    const enriched = agg
+      .map((a) => {
+        const info = studentIdToInfo[a.studentId];
+        if (!info) return null;
+        return { ...a, info };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    enriched.sort(
+      (a, b) =>
+        (a.info.section || '').localeCompare(b.info.section || '') ||
+        a.subject.localeCompare(b.subject) ||
+        (a.info.roll || '').localeCompare(b.info.roll || ''),
+    );
+    enriched.forEach((a) => {
       rows.push([
-        info?.section ?? '',
-        r.subject || '',
-        r.date || '',
-        info?.roll ?? '',
-        info?.name ?? '',
-        r.status || ''
+        a.info.roll ?? '',
+        a.info.name ?? '',
+        a.info.branch ?? '',
+        a.info.year ?? '',
+        a.info.section ?? '',
+        a.subject,
+        String(a.attended),
+        String(a.total),
       ]);
     });
     if (rows.length <= 1) {
@@ -1609,7 +1645,7 @@ export const FacultyLayout: React.FC = () => {
                     <Download className="w-8 h-8 mb-2" />
                     <div className="text-center">
                       <div className="font-medium">Subject-wise Report</div>
-                      <div className="text-sm text-muted-foreground">Download attendance by subject (CSV)</div>
+                      <div className="text-sm text-muted-foreground">CSV: one row per student per subject with total attended and scheduled hours</div>
                     </div>
                   </Button>
                   
@@ -1617,7 +1653,7 @@ export const FacultyLayout: React.FC = () => {
                     <Download className="w-8 h-8 mb-2" />
                     <div className="text-center">
                       <div className="font-medium">Section-wise Report</div>
-                      <div className="text-sm text-muted-foreground">Download attendance by section (CSV)</div>
+                      <div className="text-sm text-muted-foreground">Same columns, sorted by section (CSV)</div>
                     </div>
                   </Button>
                 </div>

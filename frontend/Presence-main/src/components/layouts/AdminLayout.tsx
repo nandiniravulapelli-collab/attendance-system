@@ -54,6 +54,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/api';
 import { formatStudentSectionsDisplay, parseStudentSections, studentMatchesAnySection } from '@/lib/studentSections';
+import { aggregateAttendanceHoursByStudentSubject, ATTENDANCE_REPORT_CSV_HEADERS } from '@/lib/attendanceReportCsv';
 
 export const AdminLayout: React.FC = () => {
   const { user, logout, updateSessionUser } = useAuth();
@@ -1134,11 +1135,32 @@ export const AdminLayout: React.FC = () => {
     URL.revokeObjectURL(link.href);
   };
   const handleDownloadSubjectWise = () => {
-    const rows: string[][] = [['Subject', 'Date', 'Roll No', 'Student Name', 'Section', 'Status']];
-    const sorted = [...filteredAttRecords].sort((a, b) => (a.subject || '').localeCompare(b.subject || '') || (a.date || '').localeCompare(b.date || ''));
-    sorted.forEach(r => {
-      const info = attStudentIdToInfo[r.student];
-      rows.push([r.subject || '', r.date || '', info?.roll ?? '', info?.name ?? '', info?.section ?? '', r.status || '']);
+    const agg = aggregateAttendanceHoursByStudentSubject(filteredAttRecords);
+    const rows: string[][] = [[...ATTENDANCE_REPORT_CSV_HEADERS]];
+    const enriched = agg
+      .map((a) => {
+        const info = attStudentIdToInfo[a.studentId];
+        if (!info) return null;
+        return { ...a, info };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    enriched.sort(
+      (a, b) =>
+        a.subject.localeCompare(b.subject) ||
+        (a.info.roll || '').localeCompare(b.info.roll || '') ||
+        (a.info.name || '').localeCompare(b.info.name || ''),
+    );
+    enriched.forEach((a) => {
+      rows.push([
+        a.info.roll ?? '',
+        a.info.name ?? '',
+        a.info.department ?? '',
+        a.info.year ?? '',
+        a.info.section ?? '',
+        a.subject,
+        String(a.attended),
+        String(a.total),
+      ]);
     });
     if (rows.length <= 1) {
       toast({ title: 'No data', description: 'No attendance records match your filters.', variant: 'destructive' });
@@ -1148,15 +1170,32 @@ export const AdminLayout: React.FC = () => {
     toast({ title: 'Downloaded', description: 'Subject-wise report downloaded.' });
   };
   const handleDownloadSectionWise = () => {
-    const rows: string[][] = [['Section', 'Subject', 'Date', 'Roll No', 'Student Name', 'Status']];
-    const sorted = [...filteredAttRecords].sort((a, b) => {
-      const secA = attStudentIdToInfo[a.student]?.section ?? '';
-      const secB = attStudentIdToInfo[b.student]?.section ?? '';
-      return secA.localeCompare(secB) || (a.date || '').localeCompare(b.date || '') || (a.subject || '').localeCompare(b.subject || '');
-    });
-    sorted.forEach(r => {
-      const info = attStudentIdToInfo[r.student];
-      rows.push([info?.section ?? '', r.subject || '', r.date || '', info?.roll ?? '', info?.name ?? '', r.status || '']);
+    const agg = aggregateAttendanceHoursByStudentSubject(filteredAttRecords);
+    const rows: string[][] = [[...ATTENDANCE_REPORT_CSV_HEADERS]];
+    const enriched = agg
+      .map((a) => {
+        const info = attStudentIdToInfo[a.studentId];
+        if (!info) return null;
+        return { ...a, info };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    enriched.sort(
+      (a, b) =>
+        (a.info.section || '').localeCompare(b.info.section || '') ||
+        a.subject.localeCompare(b.subject) ||
+        (a.info.roll || '').localeCompare(b.info.roll || ''),
+    );
+    enriched.forEach((a) => {
+      rows.push([
+        a.info.roll ?? '',
+        a.info.name ?? '',
+        a.info.department ?? '',
+        a.info.year ?? '',
+        a.info.section ?? '',
+        a.subject,
+        String(a.attended),
+        String(a.total),
+      ]);
     });
     if (rows.length <= 1) {
       toast({ title: 'No data', description: 'No attendance records match your filters.', variant: 'destructive' });
@@ -3555,14 +3594,14 @@ export const AdminLayout: React.FC = () => {
                       <Download className="w-5 h-5 mb-2 self-center" />
                       <div className="text-left">
                         <div className="font-medium">Subject-wise Report</div>
-                        <div className="text-sm text-muted-foreground">Attendance by subject (CSV)</div>
+                        <div className="text-sm text-muted-foreground">CSV: student × subject totals (attended vs scheduled hours)</div>
                       </div>
                     </Button>
                     <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={handleDownloadSectionWise}>
                       <Download className="w-5 h-5 mb-2 self-center" />
                       <div className="text-left">
                         <div className="font-medium">Section-wise Report</div>
-                        <div className="text-sm text-muted-foreground">Attendance by section (CSV)</div>
+                        <div className="text-sm text-muted-foreground">Same columns, sorted by section (CSV)</div>
                       </div>
                     </Button>
                     <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={() => setActiveTab('defaulters')}>
