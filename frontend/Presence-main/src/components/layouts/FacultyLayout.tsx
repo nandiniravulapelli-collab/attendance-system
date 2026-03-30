@@ -665,8 +665,8 @@ export const FacultyLayout: React.FC = () => {
       return stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
     });
     const buckets = [
-      { label: '90–100%', min: 90, max: 101, color: 'hsl(142, 76%, 36%)' },
-      { label: '75–90%', min: 75, max: 90, color: 'hsl(142, 56%, 51%)' },
+      { label: '90–100%', min: 90, max: 101, color: 'hsl(224, 76%, 38%)' },
+      { label: '75–90%', min: 75, max: 90, color: 'hsl(217, 91%, 52%)' },
       { label: '50–75%', min: 50, max: 75, color: 'hsl(38, 92%, 50%)' },
       { label: 'Below 50%', min: 0, max: 50, color: 'hsl(0, 84%, 60%)' },
     ];
@@ -798,7 +798,7 @@ export const FacultyLayout: React.FC = () => {
       <header className="sticky top-0 z-50 border-b border-border/60 bg-white/95 backdrop-blur-md shadow-soft">
         <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
               <GraduationCap className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -833,11 +833,11 @@ export const FacultyLayout: React.FC = () => {
           {/* Dashboard — scoped to your branch(es), aligned with admin portal layout */}
           <TabsContent value="dashboard" className="space-y-6 mt-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-emerald-200/50">
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-blue-200/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">My students</CardTitle>
-                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                    <Users className="h-5 w-5 text-emerald-600" />
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <Users className="h-5 w-5 text-blue-600" />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -846,11 +846,11 @@ export const FacultyLayout: React.FC = () => {
                 </CardContent>
               </Card>
 
-              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-teal-200/50">
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-sky-200/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">My subjects</CardTitle>
-                  <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center">
-                    <BookOpen className="h-5 w-5 text-teal-600" />
+                  <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center">
+                    <BookOpen className="h-5 w-5 text-sky-600" />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -859,11 +859,11 @@ export const FacultyLayout: React.FC = () => {
                 </CardContent>
               </Card>
 
-              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-cyan-200/50">
+              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-indigo-200/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">Attendance (your scope)</CardTitle>
-                  <div className="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center">
-                    <TrendingUp className="h-5 w-5 text-cyan-600" />
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                    <TrendingUp className="h-5 w-5 text-indigo-600" />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -923,7 +923,7 @@ export const FacultyLayout: React.FC = () => {
                         <XAxis dataKey="name" />
                         <YAxis />
                         <Tooltip />
-                        <Bar dataKey="attendance" fill="hsl(160 84% 39%)" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="attendance" fill="hsl(217 91% 52%)" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
