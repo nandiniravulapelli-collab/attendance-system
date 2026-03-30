@@ -57,6 +57,8 @@ class User(AbstractUser):
     visible_password = models.CharField(max_length=128, blank=True, null=True)
     # Comma-separated subject IDs assigned to faculty (e.g. "1,3,5")
     assigned_subject_ids = models.CharField(max_length=500, blank=True, null=True)
+    # Students marked detained are excluded from attendance marking (faculty/admin); admin can toggle.
+    is_detained = models.BooleanField(default=False)
 
 class Attendance(models.Model):
     student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='attendances')

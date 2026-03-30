@@ -14,9 +14,14 @@ class RegisterSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'password', 'role',
             'full_name', 'roll_number', 'phone',
             'department', 'section', 'sections', 'year',
+            'is_detained',
             'assigned_subject_ids', 'subjects'
         )
-        extra_kwargs = {'password': {'write_only': True}, 'assigned_subject_ids': {'required': False}}
+        extra_kwargs = {
+            'password': {'write_only': True},
+            'assigned_subject_ids': {'required': False},
+            'is_detained': {'required': False},
+        }
 
     def get_subjects(self, obj):
         s = (obj.assigned_subject_ids or '').strip()
@@ -78,10 +83,11 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'role',
             'full_name', 'roll_number', 'phone',
             'department', 'departments', 'section', 'sections', 'year',
+            'is_detained',
             'assigned_subject_ids', 'subjects'
         )
         read_only_fields = ('id', 'username', 'email', 'role')
-        extra_kwargs = {'assigned_subject_ids': {'required': False}}
+        extra_kwargs = {'assigned_subject_ids': {'required': False}, 'is_detained': {'required': False}}
 
     def get_departments(self, obj):
         s = (obj.department or '').strip()

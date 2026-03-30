@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
@@ -55,6 +56,7 @@ export const StudentLayout: React.FC = () => {
     sections?: string[];
     year: string | null;
     email: string;
+    is_detained?: boolean;
   } | null>(null);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [profileEditForm, setProfileEditForm] = useState({
@@ -72,7 +74,7 @@ export const StudentLayout: React.FC = () => {
 
   const numericId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
   useEffect(() => {
-    if (numericId == null || activeTab !== 'profile') return;
+    if (numericId == null || (activeTab !== 'profile' && activeTab !== 'dashboard')) return;
     const fetchProfile = async () => {
       try {
         const res = await fetch(apiUrl(`/api/users/${numericId}/`), { credentials: 'include' });
@@ -334,6 +336,15 @@ export const StudentLayout: React.FC = () => {
 
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-6 mt-6">
+            {apiProfile?.is_detained && (
+              <Alert variant="destructive" className="border-destructive/80">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Account marked as detained</AlertTitle>
+                <AlertDescription>
+                  Your record is listed as <strong>detained</strong>. You can still sign in to view your profile and past attendance, but you will not appear in class attendance lists until administration releases your account.
+                </AlertDescription>
+              </Alert>
+            )}
             {/* Student Info Card */}
             <Card className="border-violet-200/50">
               <CardHeader>

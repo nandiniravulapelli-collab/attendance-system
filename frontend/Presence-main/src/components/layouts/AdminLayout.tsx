@@ -92,6 +92,7 @@ export const AdminLayout: React.FC = () => {
     sections?: string[];
     year: string | null;
     visible_password?: string | null;
+    is_detained?: boolean;
   }>>([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentsError, setStudentsError] = useState<string | null>(null);
@@ -112,6 +113,10 @@ export const AdminLayout: React.FC = () => {
   const [studentFilterSection, setStudentFilterSection] = useState('');
   const [studentFilterYear, setStudentFilterYear] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  /** Students tab: filter by detention status */
+  const [studentDetentionFilter, setStudentDetentionFilter] = useState<'all' | 'active' | 'detained'>('all');
+  /** Detention tab: search both lists */
+  const [detentionTabSearch, setDetentionTabSearch] = useState('');
   const [deleteAllStudentsOpen, setDeleteAllStudentsOpen] = useState(false);
   const [deleteAllStudentsLoading, setDeleteAllStudentsLoading] = useState(false);
   const [addStudentOpen, setAddStudentOpen] = useState(false);
@@ -123,6 +128,8 @@ export const AdminLayout: React.FC = () => {
       if (studentFilterDept && studentFilterDept !== '__all__' && s.department !== studentFilterDept) return false;
       if (studentFilterSection.trim() && !studentMatchesAnySection(s, [studentFilterSection.trim()])) return false;
       if (studentFilterYear.trim() && s.year !== studentFilterYear.trim()) return false;
+      if (studentDetentionFilter === 'active' && s.is_detained) return false;
+      if (studentDetentionFilter === 'detained' && !s.is_detained) return false;
       if (q) {
         const name = (s.full_name || '').toLowerCase();
         const roll = (s.roll_number || '').toLowerCase();
@@ -131,7 +138,33 @@ export const AdminLayout: React.FC = () => {
       }
       return true;
     });
-  }, [apiStudents, studentFilterDept, studentFilterSection, studentFilterYear, studentSearchQuery]);
+  }, [apiStudents, studentFilterDept, studentFilterSection, studentFilterYear, studentSearchQuery, studentDetentionFilter]);
+
+  const detentionActiveList = useMemo(() => {
+    const q = detentionTabSearch.trim().toLowerCase();
+    return (Array.isArray(apiStudents) ? apiStudents : [])
+      .filter((s) => !s.is_detained)
+      .filter((s) => {
+        if (!q) return true;
+        const name = (s.full_name || '').toLowerCase();
+        const roll = (s.roll_number || '').toLowerCase();
+        const user = (s.username || '').toLowerCase();
+        return name.includes(q) || roll.includes(q) || user.includes(q);
+      });
+  }, [apiStudents, detentionTabSearch]);
+
+  const detentionDetainedList = useMemo(() => {
+    const q = detentionTabSearch.trim().toLowerCase();
+    return (Array.isArray(apiStudents) ? apiStudents : [])
+      .filter((s) => !!s.is_detained)
+      .filter((s) => {
+        if (!q) return true;
+        const name = (s.full_name || '').toLowerCase();
+        const roll = (s.roll_number || '').toLowerCase();
+        const user = (s.username || '').toLowerCase();
+        return name.includes(q) || roll.includes(q) || user.includes(q);
+      });
+  }, [apiStudents, detentionTabSearch]);
 
   const [addStudentForm, setAddStudentForm] = useState({
     full_name: '',
@@ -191,7 +224,7 @@ export const AdminLayout: React.FC = () => {
   const [facultyLoading, setFacultyLoading] = useState(false);
 
   useEffect(() => {
-    if (activeTab !== 'students') return;
+    if (activeTab !== 'students' && activeTab !== 'student-detention') return;
     setStudentsError(null);
     const fetchStudents = async () => {
       setStudentsLoading(true);
@@ -218,7 +251,7 @@ export const AdminLayout: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'branches' && activeTab !== 'subjects' && activeTab !== 'sections' && activeTab !== 'students' && activeTab !== 'faculty' && activeTab !== 'mark-attendance') return;
+    if (activeTab !== 'branches' && activeTab !== 'subjects' && activeTab !== 'sections' && activeTab !== 'students' && activeTab !== 'student-detention' && activeTab !== 'faculty' && activeTab !== 'mark-attendance') return;
     const fetchDepartments = async () => {
       setDepartmentsLoading(true);
       try {
@@ -237,7 +270,7 @@ export const AdminLayout: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'sections' && activeTab !== 'mark-attendance' && activeTab !== 'students') return;
+    if (activeTab !== 'sections' && activeTab !== 'mark-attendance' && activeTab !== 'students' && activeTab !== 'student-detention') return;
     setSectionsLoading(true);
     fetch(apiUrl('/api/sections/'), { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
@@ -352,7 +385,7 @@ export const AdminLayout: React.FC = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setApiStudents(prev => [...prev, { id: data.id, username: data.username, email: data.email, role: 'student', full_name: data.full_name, roll_number: data.roll_number, phone: data.phone ?? null, department: data.department ?? null, section: data.section ?? null, sections: Array.isArray(data.sections) ? data.sections : undefined, year: data.year ?? null, visible_password: addStudentForm.password }]);
+        setApiStudents(prev => [...prev, { id: data.id, username: data.username, email: data.email, role: 'student', full_name: data.full_name, roll_number: data.roll_number, phone: data.phone ?? null, department: data.department ?? null, section: data.section ?? null, sections: Array.isArray(data.sections) ? data.sections : undefined, year: data.year ?? null, visible_password: addStudentForm.password, is_detained: data.is_detained ?? false }]);
         setAddStudentOpen(false);
         setAddStudentForm({ full_name: '', roll_number: '', email: '', password: '', department: '', sections: [], year: '1', phone: '' });
         toast({ title: 'Student added', description: 'New student can log in with email and password.' });
@@ -423,6 +456,32 @@ export const AdminLayout: React.FC = () => {
       description: fail ? `Removed ${ok} student(s). ${fail} could not be deleted.` : `Removed ${ok} student(s).`,
       variant: fail ? 'destructive' : 'default',
     });
+  };
+
+  const handleSetStudentDetained = async (id: number, detained: boolean) => {
+    try {
+      const res = await fetch(apiUrl(`/api/users/${id}/`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ is_detained: detained }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setApiStudents((prev) => prev.map((s) => (s.id === id ? { ...s, ...updated } : s)));
+        toast({
+          title: detained ? 'Student detained' : 'Student active',
+          description: detained
+            ? 'They are removed from attendance marking until you release them.'
+            : 'They appear again in faculty and admin attendance lists.',
+        });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: 'Update failed', description: typeof err.detail === 'string' ? err.detail : 'Could not update status.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Update failed', description: 'Network error.', variant: 'destructive' });
+    }
   };
 
   const handleAddBranch = () => {
@@ -764,7 +823,7 @@ export const AdminLayout: React.FC = () => {
   const [attSubjects, setAttSubjects] = useState<string[]>([]);
   const [attSections, setAttSections] = useState<string[]>([]);
   const [attData, setAttData] = useState<Record<string, number>>({});
-  const [attStudents, setAttStudents] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; email: string; department: string | null; section: string | null; sections?: string[]; year: string | null }>>([]);
+  const [attStudents, setAttStudents] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; email: string; department: string | null; section: string | null; sections?: string[]; year: string | null; is_detained?: boolean }>>([]);
   const [attRecords, setAttRecords] = useState<Array<{ student: number; subject: string; date: string; status: string; hours?: number | null; total_hours?: number | null }>>([]);
   const [attSessionTotalHours, setAttSessionTotalHours] = useState<number>(1);
   const [attStudentsLoading, setAttStudentsLoading] = useState(false);
@@ -818,6 +877,7 @@ export const AdminLayout: React.FC = () => {
     ? attSubjectsFiltered.filter((s: { semester?: string }) => String(s.semester ?? '1') === attSemester)
     : attSubjectsFiltered;
   const attStudentsInSection = attStudents
+    .filter(s => !s.is_detained)
     .filter(s => attSections.length === 0 || studentMatchesAnySection(s, attSections))
     .filter(s => selectedAttDeptCodes.length === 0 || selectedAttDeptCodes.includes(s.department ?? ''))
     .map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, section: s.section || '' }));
@@ -1349,6 +1409,7 @@ export const AdminLayout: React.FC = () => {
           <TabsList className="mb-6 flex flex-wrap gap-1.5 h-auto p-1.5 rounded-xl bg-muted/80">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="students">Students</TabsTrigger>
+            <TabsTrigger value="student-detention">Active / Detained</TabsTrigger>
             <TabsTrigger value="branches">Branches</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="sections">Sections</TabsTrigger>
@@ -1537,6 +1598,16 @@ export const AdminLayout: React.FC = () => {
                   />
                 </div>
                 <div className="flex flex-wrap gap-3 items-center">
+                  <Select value={studentDetentionFilter} onValueChange={(v) => setStudentDetentionFilter(v as 'all' | 'active' | 'detained')}>
+                    <SelectTrigger className="w-[168px] rounded-xl">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="active">Active only</SelectItem>
+                      <SelectItem value="detained">Detained only</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <div className="relative flex-1 min-w-[220px] max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
@@ -1579,43 +1650,57 @@ export const AdminLayout: React.FC = () => {
                           <th className="text-left p-2">Department</th>
                           <th className="text-left p-2">Section</th>
                           <th className="text-left p-2">Year</th>
-                          <th className="text-left p-2">Password</th>
-                          <th className="text-left p-2">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {displayedStudents.map((student) => {
-                          const dept = apiDepartments.find(d => d.code === student.department);
-                          return (
-                            <tr key={student.id} className="border-b">
-                              <td className="p-2 font-mono text-sm">{student.roll_number || student.username}</td>
-                              <td className="p-2">{student.full_name || student.username}</td>
-                              <td className="p-2 text-sm text-muted-foreground">{student.email}</td>
-                              <td className="p-2">{dept?.code ?? student.department}</td>
-                              <td className="p-2">
-                                <div className="flex flex-wrap gap-1">
-                                  {parseStudentSections(student).length === 0 ? (
-                                    <Badge variant="secondary">–</Badge>
+                            <th className="text-left p-2">Status</th>
+                            <th className="text-left p-2">Password</th>
+                            <th className="text-left p-2">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {displayedStudents.map((student) => {
+                            const dept = apiDepartments.find(d => d.code === student.department);
+                            const detained = !!student.is_detained;
+                            return (
+                              <tr key={student.id} className="border-b">
+                                <td className="p-2 font-mono text-sm">{student.roll_number || student.username}</td>
+                                <td className="p-2">{student.full_name || student.username}</td>
+                                <td className="p-2 text-sm text-muted-foreground">{student.email}</td>
+                                <td className="p-2">{dept?.code ?? student.department}</td>
+                                <td className="p-2">
+                                  <div className="flex flex-wrap gap-1">
+                                    {parseStudentSections(student).length === 0 ? (
+                                      <Badge variant="secondary">–</Badge>
+                                    ) : (
+                                      parseStudentSections(student).map((sec) => (
+                                        <Badge key={sec} variant="secondary">{sec}</Badge>
+                                      ))
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-2">{student.year || '–'}</td>
+                                <td className="p-2">
+                                  <Badge variant={detained ? 'destructive' : 'default'}>{detained ? 'Detained' : 'Active'}</Badge>
+                                </td>
+                                <td className="p-2 font-mono text-sm">{student.visible_password ?? '—'}</td>
+                                <td className="p-2 flex flex-wrap gap-1">
+                                  <Button variant="outline" size="sm" onClick={() => handleOpenEditStudent(student)}>
+                                    <Edit className="w-3 h-3 mr-1 inline" /> Edit
+                                  </Button>
+                                  {detained ? (
+                                    <Button variant="outline" size="sm" onClick={() => void handleSetStudentDetained(student.id, false)}>
+                                      Release
+                                    </Button>
                                   ) : (
-                                    parseStudentSections(student).map((sec) => (
-                                      <Badge key={sec} variant="secondary">{sec}</Badge>
-                                    ))
+                                    <Button variant="outline" size="sm" className="text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => void handleSetStudentDetained(student.id, true)}>
+                                      Detain
+                                    </Button>
                                   )}
-                                </div>
-                              </td>
-                              <td className="p-2">{student.year || '–'}</td>
-                              <td className="p-2 font-mono text-sm">{student.visible_password ?? '—'}</td>
-                              <td className="p-2 flex gap-1">
-                                <Button variant="outline" size="sm" onClick={() => handleOpenEditStudent(student)}>
-                                  <Edit className="w-3 h-3 mr-1 inline" /> Edit
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDeleteStudentClick(student.id)} className="text-destructive hover:text-destructive">
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                                  <Button variant="outline" size="sm" onClick={() => handleDeleteStudentClick(student.id)} className="text-destructive hover:text-destructive">
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>
@@ -1867,6 +1952,118 @@ export const AdminLayout: React.FC = () => {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+          </TabsContent>
+
+          <TabsContent value="student-detention" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Active &amp; detained students</CardTitle>
+                <CardDescription>
+                  Detained students do not appear in faculty or admin Mark Attendance lists and cannot receive new attendance marks. Release a student to restore access to attendance marking.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    className="pl-9 rounded-xl"
+                    placeholder="Search both lists by name or roll number…"
+                    value={detentionTabSearch}
+                    onChange={(e) => setDetentionTabSearch(e.target.value)}
+                  />
+                </div>
+                {studentsLoading ? (
+                  <p className="text-muted-foreground">Loading students…</p>
+                ) : studentsError ? (
+                  <p className="text-destructive">{studentsError}</p>
+                ) : (
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <Card className="border-violet-200/50 shadow-sm">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg">Active ({detentionActiveList.length})</CardTitle>
+                        <CardDescription>Eligible for attendance marking.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        {detentionActiveList.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No active students match the search.</p>
+                        ) : (
+                          <div className="overflow-x-auto max-h-[420px] overflow-y-auto border rounded-lg">
+                            <table className="w-full text-sm">
+                              <thead className="sticky top-0 bg-muted/90">
+                                <tr className="border-b">
+                                  <th className="text-left p-2">Roll</th>
+                                  <th className="text-left p-2">Name</th>
+                                  <th className="text-left p-2">Dept</th>
+                                  <th className="text-right p-2">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {detentionActiveList.map((s) => {
+                                  const dept = apiDepartments.find((d) => d.code === s.department);
+                                  return (
+                                                                        <tr key={s.id} className="border-b">
+                                      <td className="p-2 font-mono">{s.roll_number || s.username}</td>
+                                      <td className="p-2">{s.full_name || s.username}</td>
+                                      <td className="p-2">{dept?.code ?? s.department ?? '–'}</td>
+                                      <td className="p-2 text-right">
+                                        <Button variant="outline" size="sm" className="text-destructive border-destructive/50" onClick={() => void handleSetStudentDetained(s.id, true)}>
+                                          Detain
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card className="border-destructive/25 shadow-sm">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg">Detained ({detentionDetainedList.length})</CardTitle>
+                        <CardDescription>Not shown in attendance marking until released.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        {detentionDetainedList.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No detained students{detentionTabSearch.trim() ? ' match the search.' : '.'}</p>
+                        ) : (
+                          <div className="overflow-x-auto max-h-[420px] overflow-y-auto border rounded-lg">
+                            <table className="w-full text-sm">
+                              <thead className="sticky top-0 bg-muted/90">
+                                <tr className="border-b">
+                                  <th className="text-left p-2">Roll</th>
+                                  <th className="text-left p-2">Name</th>
+                                  <th className="text-left p-2">Dept</th>
+                                  <th className="text-right p-2">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {detentionDetainedList.map((s) => {
+                                  const dept = apiDepartments.find((d) => d.code === s.department);
+                                  return (
+                                    <tr key={s.id} className="border-b">
+                                      <td className="p-2 font-mono">{s.roll_number || s.username}</td>
+                                      <td className="p-2">{s.full_name || s.username}</td>
+                                      <td className="p-2">{dept?.code ?? s.department ?? '–'}</td>
+                                      <td className="p-2 text-right">
+                                        <Button variant="outline" size="sm" onClick={() => void handleSetStudentDetained(s.id, false)}>
+                                          Release
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Branches Tab */}

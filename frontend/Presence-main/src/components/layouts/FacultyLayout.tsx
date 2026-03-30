@@ -46,7 +46,7 @@ export const FacultyLayout: React.FC = () => {
   const [apiDepartments, setApiDepartments] = useState<Array<{ id: number; name: string; code: string }>>([]);
   const [attendanceData, setAttendanceData] = useState<Record<string, number>>({});
   const [sessionTotalHours, setSessionTotalHours] = useState<number>(1);
-  const [apiStudents, setApiStudents] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; email: string; department: string | null; section: string | null; sections?: string[]; year: string | null }>>([]);
+  const [apiStudents, setApiStudents] = useState<Array<{ id: number; full_name: string | null; roll_number: string | null; email: string; department: string | null; section: string | null; sections?: string[]; year: string | null; is_detained?: boolean }>>([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [attendanceRecords, setAttendanceRecords] = useState<Array<{ student: number; subject: string; date: string; status: string; hours?: number | null; total_hours?: number | null }>>([]);
   const [apiSubjects, setApiSubjects] = useState<ApiSubject[]>([]);
@@ -132,6 +132,7 @@ export const FacultyLayout: React.FC = () => {
   }, [user?.role, activeTab]);
 
   const studentsInSection = apiStudents
+    .filter(s => !s.is_detained)
     .map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, departmentId: s.department || '', section: s.section || '', year: s.year ? Number(s.year) : 0 }))
     .filter(s => (selectedBranchCodes.length === 0 || selectedBranchCodes.includes(s.departmentId)))
     .filter(s => studentMatchesAnySection(s, selectedSections));

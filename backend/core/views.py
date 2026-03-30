@@ -196,8 +196,13 @@ def attendance_view(request):
                 if not date_obj:
                     errors.append({"index": i, "errors": {"detail": f"Invalid date: {date_val}"}})
                     continue
-                if not User.objects.filter(pk=student_id, role='student').exists():
+                try:
+                    stu = User.objects.get(pk=student_id, role='student')
+                except User.DoesNotExist:
                     errors.append({"index": i, "errors": {"detail": f"Student id {student_id} not found."}})
+                    continue
+                if stu.is_detained:
+                    errors.append({"index": i, "errors": {"detail": "This student is detained and cannot receive attendance marks."}})
                     continue
                 status_normalized = str(status_val).strip().lower()
                 if status_normalized in ('present', 'p'):
@@ -260,6 +265,7 @@ def user_list_view(request):
 
     qs = User.objects.filter(role=role).order_by('id')
     if is_faculty:
+        qs = qs.filter(is_detained=False)
         dept_str = (request.user.department or '').strip()
         dept_list = [x.strip() for x in dept_str.split(',') if x.strip()]
         if dept_list:
@@ -371,6 +377,9 @@ def user_detail_view(request, pk):
         if 'sections' in data:
             data['section'] = _sections_list_to_csv(data.get('sections'))
             data.pop('sections', None)
+        if 'is_detained' in data:
+            if not is_admin or target.role != 'student':
+                data.pop('is_detained', None)
         serializer = UserSerializer(target, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()
