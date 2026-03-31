@@ -130,8 +130,34 @@ class SectionSerializer(serializers.ModelSerializer):
 
 
 class SubjectSerializer(serializers.ModelSerializer):
-    department_code = serializers.CharField(source='department.code', read_only=True)
+    departments = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), many=True)
+    department_codes = serializers.SerializerMethodField(read_only=True)
+    department_code = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Subject
-        fields = ('id', 'name', 'code', 'department', 'department_code', 'year', 'semester')
+        fields = ('id', 'name', 'code', 'departments', 'department_codes', 'department_code', 'year', 'semester')
+
+    def get_department_codes(self, obj):
+        codes = [d.code for d in obj.departments.all()]
+        return sorted(codes)
+
+    def get_department_code(self, obj):
+        codes = self.get_department_codes(obj)
+        return codes[0] if codes else ''
+
+    def create(self, validated_data):
+        departments = validated_data.pop('departments', [])
+        subject = Subject.objects.create(**validated_data)
+        if departments:
+            subject.departments.set(departments)
+        return subject
+
+    def update(self, instance, validated_data):
+        departments = validated_data.pop('departments', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if departments is not None:
+            instance.departments.set(departments)
+        return instance

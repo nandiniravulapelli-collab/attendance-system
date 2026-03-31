@@ -221,11 +221,11 @@ export const AdminLayout: React.FC = () => {
   const [branchDeleteId, setBranchDeleteId] = useState<number | null>(null);
 
   // Subjects from API
-  const [apiSubjects, setApiSubjects] = useState<Array<{ id: number; name: string; code: string; department: number; department_code: string; year: string; semester: string }>>([]);
+  const [apiSubjects, setApiSubjects] = useState<Array<{ id: number; name: string; code: string; departments: number[]; department_codes: string[]; department_code: string; year: string; semester: string }>>([]);
   const [subjectsLoading, setSubjectsLoading] = useState(false);
   const [subjectEditOpen, setSubjectEditOpen] = useState(false);
   const [subjectDeleteOpen, setSubjectDeleteOpen] = useState(false);
-  const [subjectForm, setSubjectForm] = useState({ name: '', code: '', department: '', year: '1', semester: '1' });
+  const [subjectForm, setSubjectForm] = useState({ name: '', code: '', departments: [] as string[], year: '1', semester: '1' });
   const [subjectEditId, setSubjectEditId] = useState<number | null>(null);
   const [subjectDeleteId, setSubjectDeleteId] = useState<number | null>(null);
   const [subjectFilterDept, setSubjectFilterDept] = useState<string>('__all__');
@@ -233,6 +233,10 @@ export const AdminLayout: React.FC = () => {
   const [subjectFilterSemester, setSubjectFilterSemester] = useState<string>('__all__');
   const SUBJECT_YEARS = ['1', '2', '3', '4'];
   const SUBJECT_SEMESTERS = ['1', '2'];
+  const subjectHasDepartment = (subject: { department_codes?: string[]; department_code?: string }, deptCode: string) =>
+    Array.isArray(subject.department_codes)
+      ? subject.department_codes.includes(deptCode)
+      : subject.department_code === deptCode;
 
   // Sections (admin-managed; name can be character, string, or number)
   const [apiSections, setApiSections] = useState<Array<{ id: number; name: string }>>([]);
@@ -599,7 +603,7 @@ export const AdminLayout: React.FC = () => {
     setSubjectForm({
       name: '',
       code: '',
-      department: (subjectFilterDept && subjectFilterDept !== '__all__') ? subjectFilterDept : (apiDepartments[0]?.code ?? '__all__'),
+      departments: (subjectFilterDept && subjectFilterDept !== '__all__') ? [subjectFilterDept] : (apiDepartments[0]?.code ? [apiDepartments[0].code] : []),
       year: (subjectFilterYear && subjectFilterYear !== '__all__') ? subjectFilterYear : '1',
       semester: (subjectFilterSemester && subjectFilterSemester !== '__all__') ? subjectFilterSemester : '1'
     });
@@ -607,12 +611,12 @@ export const AdminLayout: React.FC = () => {
   };
   const handleEditSubject = (s: typeof apiSubjects[0]) => {
     setSubjectEditId(s.id);
-    setSubjectForm({ name: s.name, code: s.code, department: s.department_code, year: s.year ?? '1', semester: s.semester ?? '1' });
+    setSubjectForm({ name: s.name, code: s.code, departments: s.department_codes ?? (s.department_code ? [s.department_code] : []), year: s.year ?? '1', semester: s.semester ?? '1' });
     setSubjectEditOpen(true);
   };
   const handleSaveSubject = async () => {
-    if (!subjectForm.name.trim() || !subjectForm.code.trim() || !subjectForm.department) {
-      toast({ title: 'Validation', description: 'Name, code and branch are required.', variant: 'destructive' });
+    if (!subjectForm.name.trim() || !subjectForm.code.trim() || subjectForm.departments.length === 0) {
+      toast({ title: 'Validation', description: 'Name, code and at least one branch are required.', variant: 'destructive' });
       return;
     }
     if (!subjectForm.year || subjectForm.year === '__all__') {
@@ -623,13 +627,15 @@ export const AdminLayout: React.FC = () => {
       toast({ title: 'Validation', description: 'Please select a semester.', variant: 'destructive' });
       return;
     }
-    const deptId = apiDepartments.find(d => d.code === subjectForm.department)?.id ?? (typeof subjectForm.department === 'number' ? subjectForm.department : null);
-    if (subjectEditId == null && !deptId) {
-      toast({ title: 'Validation', description: 'Select a valid branch.', variant: 'destructive' });
+    const deptIds = subjectForm.departments
+      .map((code) => apiDepartments.find((d) => d.code === code)?.id ?? null)
+      .filter((id): id is number => id != null);
+    if (deptIds.length !== subjectForm.departments.length) {
+      toast({ title: 'Validation', description: 'Select valid branches.', variant: 'destructive' });
       return;
     }
     try {
-      const payload = { name: subjectForm.name.trim(), code: subjectForm.code.trim(), department: deptId ?? subjectForm.department, year: subjectForm.year, semester: subjectForm.semester };
+      const payload = { name: subjectForm.name.trim(), code: subjectForm.code.trim(), departments: deptIds, year: subjectForm.year, semester: subjectForm.semester };
       if (subjectEditId != null) {
         const res = await fetch(apiUrl(`/api/subjects/${subjectEditId}/`), {
           method: 'PATCH',
@@ -927,7 +933,10 @@ export const AdminLayout: React.FC = () => {
       .finally(() => setAttStudentsLoading(false));
   }, [activeTab, selectedAttDeptCodes.join(','), attYear]);
 
-  const attSubjectsFiltered = (apiSubjects || []).filter((s: { department_code?: string }) => selectedAttDeptCodes.length === 0 || selectedAttDeptCodes.includes(s.department_code ?? ''));
+  const attSubjectsFiltered = (apiSubjects || []).filter(
+    (s: { department_codes?: string[]; department_code?: string }) =>
+      selectedAttDeptCodes.length === 0 || selectedAttDeptCodes.some((code) => subjectHasDepartment(s, code)),
+  );
   const attSubjectsSem = attSemester && attSemester !== '__all__'
     ? attSubjectsFiltered.filter((s: { semester?: string }) => String(s.semester ?? '1') === attSemester)
     : attSubjectsFiltered;
@@ -2541,7 +2550,13 @@ export const AdminLayout: React.FC = () => {
                           <tr key={s.id} className="border-b">
                             <td className="p-3 font-mono font-medium">{s.code}</td>
                             <td className="p-3">{s.name}</td>
-                            <td className="p-3"><Badge variant="secondary">{s.department_code}</Badge></td>
+                            <td className="p-3">
+                              <div className="flex flex-wrap gap-1">
+                                {(s.department_codes ?? (s.department_code ? [s.department_code] : [])).map((code) => (
+                                  <Badge key={`${s.id}-${code}`} variant="secondary">{code}</Badge>
+                                ))}
+                              </div>
+                            </td>
                             <td className="p-3"><Badge variant="outline">Year {s.year ?? '1'}</Badge></td>
                             <td className="p-3"><Badge variant="outline">Sem {s.semester ?? '1'}</Badge></td>
                             <td className="p-3 flex gap-2">
@@ -2560,18 +2575,37 @@ export const AdminLayout: React.FC = () => {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>{subjectEditId == null ? 'Add Subject' : 'Edit Subject'}</DialogTitle>
-                  <DialogDescription>Subject code is unique per branch, year, and semester. Each year has 2 semesters.</DialogDescription>
+                  <DialogDescription>One subject code can belong to multiple branches. Each year has 2 semesters.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label>Branch</Label>
-                    <Select value={subjectForm.department || '__all__'} onValueChange={v => setSubjectForm(f => ({ ...f, department: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">Select branch</SelectItem>
-                        {apiDepartments.map(d => <SelectItem key={d.id} value={d.code}>{d.code} – {d.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <Label>Branches</Label>
+                    <div className="border rounded-lg p-4 max-h-48 overflow-y-auto space-y-3">
+                      <p className="text-xs text-muted-foreground">Choose every branch where this same subject code should be available.</p>
+                      {apiDepartments.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No branches available.</p>
+                      ) : (
+                        apiDepartments.map((d) => (
+                          <div key={d.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`subject-dept-${d.id}`}
+                              checked={subjectForm.departments.includes(d.code)}
+                              onCheckedChange={(checked) =>
+                                setSubjectForm((f) => ({
+                                  ...f,
+                                  departments: checked
+                                    ? [...f.departments, d.code]
+                                    : f.departments.filter((code) => code !== d.code),
+                                }))
+                              }
+                            />
+                            <label htmlFor={`subject-dept-${d.id}`} className="text-sm cursor-pointer">
+                              {d.code} - {d.name}
+                            </label>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
@@ -2817,7 +2851,8 @@ export const AdminLayout: React.FC = () => {
                       {(() => {
                         const facultyDeptCodes = facultyFormData.departmentIds || [];
                         const assignableSubjects = (Array.isArray(apiSubjects) ? apiSubjects : []).filter(
-                          (s: { department_code: string }) => facultyDeptCodes.length === 0 || facultyDeptCodes.includes(s.department_code)
+                          (s: { department_codes?: string[]; department_code?: string }) =>
+                            facultyDeptCodes.length === 0 || facultyDeptCodes.some((code) => subjectHasDepartment(s, code)),
                         );
                         if (assignableSubjects.length === 0) {
                           return <p className="text-sm text-muted-foreground">No subjects for this branch. Add subjects in the Subjects tab first.</p>;

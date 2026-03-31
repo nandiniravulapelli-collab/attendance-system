@@ -496,26 +496,34 @@ def subject_list_view(request):
     if request.method == 'GET' and not is_admin and not is_faculty:
         return Response({"detail": "Not allowed."}, status=403)
     if request.method == 'GET':
-        qs = Subject.objects.select_related('department').all().order_by('department__code', 'year', 'semester', 'code')
+        qs = Subject.objects.prefetch_related('departments').all().order_by('year', 'semester', 'code', 'id')
         department = request.query_params.get('department', '').strip()
         if department:
-            qs = qs.filter(department__code=department)
+            qs = qs.filter(departments__code=department)
         year = request.query_params.get('year', '').strip()
         if year:
             qs = qs.filter(year=year)
         semester = request.query_params.get('semester', '').strip()
         if semester:
             qs = qs.filter(semester=semester)
-        return Response(SubjectSerializer(qs, many=True).data)
-    # POST: require department (id or code), year and semester optional (default '1')
+        return Response(SubjectSerializer(qs.distinct(), many=True).data)
+    # POST: require departments (ids or codes), year and semester optional (default '1')
     data = request.data.copy()
-    dept_id = data.get('department')
-    if not dept_id:
-        return Response({"department": ["This field is required."]}, status=400)
-    dept = Department.objects.filter(pk=dept_id).first() or Department.objects.filter(code=dept_id).first()
-    if not dept:
-        return Response({"department": ["Department not found."]}, status=400)
-    data['department'] = dept.id
+    raw_departments = data.get('departments')
+    if not raw_departments:
+        legacy_department = data.get('department')
+        raw_departments = [legacy_department] if legacy_department else []
+    if not isinstance(raw_departments, (list, tuple)):
+        raw_departments = [raw_departments]
+    dept_ids = []
+    for dept_value in raw_departments:
+        dept = Department.objects.filter(pk=dept_value).first() or Department.objects.filter(code=dept_value).first()
+        if not dept:
+            return Response({"departments": [f"Department '{dept_value}' not found."]}, status=400)
+        dept_ids.append(dept.id)
+    if not dept_ids:
+        return Response({"departments": ["At least one department is required."]}, status=400)
+    data['departments'] = sorted(set(dept_ids))
     if data.get('year') in (None, ''):
         data['year'] = '1'
     if data.get('semester') in (None, ''):
@@ -533,13 +541,27 @@ def subject_detail_view(request, pk):
     if request.user.role != 'admin' and not request.user.is_superuser:
         return Response({"detail": "Admin only."}, status=403)
     try:
-        subj = Subject.objects.get(pk=pk)
+        subj = Subject.objects.prefetch_related('departments').get(pk=pk)
     except Subject.DoesNotExist:
         return Response({"detail": "Not found."}, status=404)
     if request.method == 'GET':
         return Response(SubjectSerializer(subj).data)
     if request.method == 'PATCH':
-        serializer = SubjectSerializer(subj, data=request.data, partial=True)
+        data = request.data.copy()
+        if 'departments' in data or 'department' in data:
+            raw_departments = data.get('departments')
+            if raw_departments is None:
+                raw_departments = [data.get('department')] if data.get('department') else []
+            if not isinstance(raw_departments, (list, tuple)):
+                raw_departments = [raw_departments]
+            dept_ids = []
+            for dept_value in raw_departments:
+                dept = Department.objects.filter(pk=dept_value).first() or Department.objects.filter(code=dept_value).first()
+                if not dept:
+                    return Response({"departments": [f"Department '{dept_value}' not found."]}, status=400)
+                dept_ids.append(dept.id)
+            data['departments'] = sorted(set(dept_ids))
+        serializer = SubjectSerializer(subj, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -729,15 +751,16 @@ def export_attendance_excel_view(request):
 
     # Subjects sheet
     ws_subjects = wb.create_sheet("Subjects")
-    ws_subjects.append(["Code", "Name", "Department Code", "Year", "Semester"])
-    for s in Subject.objects.select_related("department").all().order_by(
-        "department__code", "year", "semester", "code"
+    ws_subjects.append(["Code", "Name", "Department Codes", "Year", "Semester"])
+    for s in Subject.objects.prefetch_related("departments").all().order_by(
+        "year", "semester", "code", "id"
     ):
+        dept_codes = ",".join(sorted(s.departments.values_list("code", flat=True)))
         ws_subjects.append(
             [
                 s.code,
                 s.name,
-                s.department.code if s.department_id else "",
+                dept_codes,
                 s.year,
                 s.semester,
             ]

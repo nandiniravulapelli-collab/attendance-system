@@ -50,7 +50,15 @@ import { toast } from '@/hooks/use-toast';
 import { formatStudentSectionsDisplay, studentMatchesAnySection } from '@/lib/studentSections';
 import { aggregateAttendanceHoursByStudentSubject, ATTENDANCE_REPORT_CSV_HEADERS } from '@/lib/attendanceReportCsv';
 
-type ApiSubject = { id: number; name: string; code: string; department_code: string; year?: string; semester?: string };
+type ApiSubject = {
+  id: number;
+  name: string;
+  code: string;
+  department_code: string;
+  department_codes?: string[];
+  year?: string;
+  semester?: string;
+};
 
 const SAT_YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
 
@@ -103,6 +111,10 @@ export const FacultyLayout: React.FC = () => {
     .split(',')
     .map((d: string) => d.trim())
     .filter(Boolean);
+  const subjectHasDepartment = (subject: { department_codes?: string[]; department_code?: string }, deptCode: string) =>
+    Array.isArray(subject.department_codes)
+      ? subject.department_codes.includes(deptCode)
+      : subject.department_code === deptCode;
 
   const selectedBranchCodes = selectedBranches.includes('__all__')
     ? facultyDeptCodes
@@ -110,7 +122,7 @@ export const FacultyLayout: React.FC = () => {
 
   const subjectsAllBase = useMemo(() => {
     if (facultyDeptCodes.length > 0 && apiSubjects.length > 0) {
-      return apiSubjects.filter((s: { department_code?: string }) => facultyDeptCodes.includes(s.department_code ?? ''));
+      return apiSubjects.filter((s) => facultyDeptCodes.some((code) => subjectHasDepartment(s, code)));
     }
     return apiSubjects;
   }, [apiSubjects, facultyDeptCodes.join(',')]);
@@ -128,7 +140,7 @@ export const FacultyLayout: React.FC = () => {
   }, [subjectsAllBase, facultyAssignedSubjectTokens.join('|')]);
 
   const subjectsByBranch = selectedBranchCodes.length > 0
-    ? subjectsAll.filter((s: { department_code?: string }) => selectedBranchCodes.includes(s.department_code ?? ''))
+    ? subjectsAll.filter((s) => selectedBranchCodes.some((code) => subjectHasDepartment(s, code)))
     : subjectsAll;
   const subjects = selectedSemester && selectedSemester !== '__all__'
     ? subjectsByBranch.filter((s: { semester?: string }) => String(s.semester ?? '1') === selectedSemester)
@@ -144,7 +156,7 @@ export const FacultyLayout: React.FC = () => {
   const satSubjectOptions = useMemo(() => {
     if (satBranchCodes.length === 0 || satSelectedYears.length === 0) return [];
     return subjectsAll.filter((s) => {
-      if (!satBranchCodes.includes(s.department_code ?? '')) return false;
+      if (!satBranchCodes.some((code) => subjectHasDepartment(s, code))) return false;
       if (!satSelectedYears.includes(String(s.year ?? '1'))) return false;
       return true;
     });
