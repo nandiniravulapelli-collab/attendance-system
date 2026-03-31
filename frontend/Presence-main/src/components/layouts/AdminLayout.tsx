@@ -1124,9 +1124,33 @@ export const AdminLayout: React.FC = () => {
   }, [attStudentIdToInfo, apiSections]);
 
   const attRecordSubjectOptions = useMemo(() => {
-    const byRecords = new Set<string>(attRecords.map((r) => (r.subject || '').trim()).filter(Boolean));
-    return Array.from(byRecords).sort((a, b) => a.localeCompare(b));
-  }, [attRecords]);
+    const selectedYears = new Set(attRecordFilterYears);
+    const selectedBranches = new Set(attRecordFilterBranches.map((v) => v.toLowerCase()));
+    const fromSubjects = new Set<string>();
+
+    (apiSubjects || []).forEach((subject) => {
+      const subjectYear = String(subject.year ?? '1').trim();
+      const subjectCode = (subject.code || '').trim();
+      if (!subjectCode) return;
+      if (selectedYears.size > 0 && !selectedYears.has(subjectYear)) return;
+      if (
+        selectedBranches.size > 0 &&
+        !((subject.department_codes ?? (subject.department_code ? [subject.department_code] : [])).some((code) =>
+          selectedBranches.has(String(code).toLowerCase()),
+        ))
+      ) {
+        return;
+      }
+      fromSubjects.add(subjectCode);
+    });
+
+    return Array.from(fromSubjects).sort((a, b) => a.localeCompare(b));
+  }, [apiSubjects, attRecordFilterYears, attRecordFilterBranches]);
+
+  useEffect(() => {
+    const allowed = new Set(attRecordSubjectOptions);
+    setAttRecordFilterSubjects((prev) => prev.filter((subject) => allowed.has(subject)));
+  }, [attRecordSubjectOptions]);
 
   const filteredAttRecords = useMemo(() => {
     const selectedYears = new Set(attRecordFilterYears);
@@ -1156,6 +1180,16 @@ export const AdminLayout: React.FC = () => {
       return name.includes(q) || roll.includes(q);
     });
   }, [filteredAttRecords, attStudentIdToInfo, attRecordsSearchQuery]);
+
+  const showAllAttendanceRecordFilters = () => {
+    setAttReportFromDate(null);
+    setAttReportToDate(null);
+    setAttRecordFilterYears([]);
+    setAttRecordFilterBranches([]);
+    setAttRecordFilterSections([]);
+    setAttRecordFilterSubjects([]);
+    setAttRecordsSearchQuery('');
+  };
 
   const downloadCsv = (filename: string, rows: string[][]) => {
     const header = rows[0];
@@ -3195,7 +3229,7 @@ export const AdminLayout: React.FC = () => {
             <Card>
               <CardHeader>
                 <CardTitle>All Attendance Records</CardTitle>
-                <CardDescription>System-wide attendance entries. Filter by date range to see attendance between specific days.</CardDescription>
+                <CardDescription>System-wide attendance entries. If you do not choose any filters, all records are shown. Use Show all to reset everything.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -3204,7 +3238,7 @@ export const AdminLayout: React.FC = () => {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal">
-                          {attRecordFilterYears.length > 0 ? `${attRecordFilterYears.length} selected` : 'Select year(s)'}
+                          {attRecordFilterYears.length > 0 ? `${attRecordFilterYears.length} selected` : 'All years'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-64 p-3">
@@ -3212,7 +3246,7 @@ export const AdminLayout: React.FC = () => {
                           <span className="text-xs text-muted-foreground">Quick actions</span>
                           <div className="flex gap-2">
                             <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterYears(attRecordYearOptions)}>Select all</Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterYears([])}>Clear</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterYears([])}>Show all</Button>
                           </div>
                         </div>
                         {attRecordYearOptions.length === 0 ? (
@@ -3239,7 +3273,7 @@ export const AdminLayout: React.FC = () => {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal">
-                          {attRecordFilterBranches.length > 0 ? `${attRecordFilterBranches.length} selected` : 'Select branch(es)'}
+                          {attRecordFilterBranches.length > 0 ? `${attRecordFilterBranches.length} selected` : 'All branches'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-72 p-3 max-h-72 overflow-y-auto">
@@ -3247,7 +3281,7 @@ export const AdminLayout: React.FC = () => {
                           <span className="text-xs text-muted-foreground">Quick actions</span>
                           <div className="flex gap-2">
                             <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterBranches(attRecordBranchOptions)}>Select all</Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterBranches([])}>Clear</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterBranches([])}>Show all</Button>
                           </div>
                         </div>
                         {attRecordBranchOptions.length === 0 ? (
@@ -3274,7 +3308,7 @@ export const AdminLayout: React.FC = () => {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal">
-                          {attRecordFilterSections.length > 0 ? `${attRecordFilterSections.length} selected` : 'Select section(s)'}
+                          {attRecordFilterSections.length > 0 ? `${attRecordFilterSections.length} selected` : 'All sections'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-64 p-3 max-h-72 overflow-y-auto">
@@ -3282,7 +3316,7 @@ export const AdminLayout: React.FC = () => {
                           <span className="text-xs text-muted-foreground">Quick actions</span>
                           <div className="flex gap-2">
                             <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSections(attRecordSectionOptions)}>Select all</Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSections([])}>Clear</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSections([])}>Show all</Button>
                           </div>
                         </div>
                         {attRecordSectionOptions.length === 0 ? (
@@ -3309,7 +3343,7 @@ export const AdminLayout: React.FC = () => {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal">
-                          {attRecordFilterSubjects.length > 0 ? `${attRecordFilterSubjects.length} selected` : 'Select subject(s)'}
+                          {attRecordFilterSubjects.length > 0 ? `${attRecordFilterSubjects.length} selected` : 'All subjects'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-80 p-3 max-h-72 overflow-y-auto">
@@ -3317,7 +3351,7 @@ export const AdminLayout: React.FC = () => {
                           <span className="text-xs text-muted-foreground">Quick actions</span>
                           <div className="flex gap-2">
                             <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSubjects(attRecordSubjectOptions)}>Select all</Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSubjects([])}>Clear</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setAttRecordFilterSubjects([])}>Show all</Button>
                           </div>
                         </div>
                         {attRecordSubjectOptions.length === 0 ? (
@@ -3368,17 +3402,9 @@ export const AdminLayout: React.FC = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setAttReportFromDate(null);
-                      setAttReportToDate(null);
-                      setAttRecordFilterYears([]);
-                      setAttRecordFilterBranches([]);
-                      setAttRecordFilterSections([]);
-                      setAttRecordFilterSubjects([]);
-                      setAttRecordsSearchQuery('');
-                    }}
+                    onClick={showAllAttendanceRecordFilters}
                   >
-                    Clear all filters
+                    Show all
                   </Button>
                 </div>
                 <div className="relative max-w-md mb-4">
