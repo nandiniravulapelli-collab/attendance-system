@@ -539,6 +539,7 @@ export const FacultyLayout: React.FC = () => {
       }
 
       const created = typeof data.created === 'number' ? data.created : 0;
+      const updated = typeof data.updated === 'number' ? data.updated : 0;
       const skippedExisting = typeof data.skipped_existing === 'number' ? data.skipped_existing : 0;
       const skippedMissingStudent =
         typeof data.skipped_missing_student === 'number' ? data.skipped_missing_student : 0;
@@ -549,6 +550,7 @@ export const FacultyLayout: React.FC = () => {
       const errors: Array<{ row: number; reason: string }> = Array.isArray(data.errors) ? data.errors : [];
 
       const parts = [`Created ${created} records.`];
+      if (updated > 0) parts.push(`Updated ${updated} records.`);
       if (totalSkipped > 0) parts.push(`Skipped ${totalSkipped} rows.`);
       let description = parts.join(' ');
       if (errors.length > 0) {
@@ -559,14 +561,14 @@ export const FacultyLayout: React.FC = () => {
         if (skippedMissingStudent > 0) why.push(`${skippedMissingStudent} student not found`);
         if (skippedMissingSubject > 0) why.push(`${skippedMissingSubject} subject not found`);
         if (skippedInvalid > 0) why.push(`${skippedInvalid} invalid`);
-        if (skippedExisting > 0) why.push(`${skippedExisting} already exist`);
+        if (skippedExisting > 0) why.push(`${skippedExisting} unchanged`);
         if (why.length) description += ' — ' + why.join('; ');
       }
 
       toast({
-        title: created > 0 ? 'Bulk attendance upload completed' : 'No records created',
+        title: created > 0 || updated > 0 ? 'Bulk attendance upload completed' : 'No records created',
         description: description,
-        variant: created === 0 && totalSkipped > 0 ? 'destructive' : 'default',
+        variant: created === 0 && updated === 0 && totalSkipped > 0 ? 'destructive' : 'default',
       });
 
       fetch(apiUrl('/api/attendance/'), { credentials: 'include' })

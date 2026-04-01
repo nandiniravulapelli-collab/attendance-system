@@ -618,6 +618,7 @@ def bulk_student_upload_view(request):
 
     created_count = 0
     skipped_existing = 0
+    updated_count = 0
     skipped_invalid = 0
     error_rows = []
 
@@ -1099,11 +1100,24 @@ def bulk_attendance_upload_view(request):
             if created:
                 created_count += 1
             else:
-                skipped_existing += 1
+                same_status = (att_obj.status or '') == defaults["status"]
+                existing_hours = float(att_obj.hours) if att_obj.hours is not None else None
+                existing_total_hours = float(att_obj.total_hours) if att_obj.total_hours is not None else None
+                new_hours = float(defaults["hours"]) if defaults["hours"] is not None else None
+                new_total_hours = float(defaults["total_hours"]) if defaults["total_hours"] is not None else None
+                if same_status and existing_hours == new_hours and existing_total_hours == new_total_hours:
+                    skipped_existing += 1
+                else:
+                    att_obj.status = defaults["status"]
+                    att_obj.hours = defaults["hours"]
+                    att_obj.total_hours = defaults["total_hours"]
+                    att_obj.save(update_fields=["status", "hours", "total_hours"])
+                    updated_count += 1
 
     return Response(
         {
             "created": created_count,
+            "updated": updated_count,
             "skipped": skipped_existing + skipped_missing_student + skipped_missing_subject + skipped_invalid,
             "skipped_existing": skipped_existing,
             "skipped_missing_student": skipped_missing_student,

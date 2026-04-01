@@ -1060,8 +1060,15 @@ export const AdminLayout: React.FC = () => {
         return;
       }
       const created = typeof data.created === 'number' ? data.created : 0;
+      const updated = typeof data.updated === 'number' ? data.updated : 0;
       const skipped = (typeof data.skipped_existing === 'number' ? data.skipped_existing : 0) + (typeof data.skipped_invalid === 'number' ? data.skipped_invalid : 0);
-      toast({ title: created > 0 ? 'Bulk upload completed' : 'No records created', description: `Created ${created}, skipped ${skipped} rows.` });
+      const parts = [`Created ${created}`];
+      if (updated > 0) parts.push(`updated ${updated}`);
+      parts.push(`skipped ${skipped} rows`);
+      toast({
+        title: created > 0 || updated > 0 ? 'Bulk upload completed' : 'No records created',
+        description: `${parts.join(', ')}.`,
+      });
       setAttRecords(prev => prev.length ? prev : []); // refresh will happen when tab is re-opened
       fetch(apiUrl('/api/attendance/'), { credentials: 'include' })
         .then(r => r.ok ? r.json() : { records: [] })
