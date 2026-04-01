@@ -912,6 +912,7 @@ def bulk_attendance_upload_view(request):
     }
 
     created_count = 0
+    updated_count = 0
     skipped_existing = 0
     skipped_missing_student = 0
     skipped_missing_subject = 0
