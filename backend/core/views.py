@@ -794,6 +794,128 @@ def export_attendance_excel_view(request):
     return response
 
 
+def _parse_query_multi(request, *names):
+    """Collect repeated query params or comma/semicolon-separated values from first matching name."""
+    for name in names:
+        vals = request.query_params.getlist(name)
+        if vals:
+            out = []
+            for v in vals:
+                if v is None:
+                    continue
+                for part in re.split(r'[,;]+', str(v).strip()):
+                    p = part.strip()
+                    if p and p not in out:
+                        out.append(p)
+            if out:
+                return out
+        single = (request.query_params.get(name) or '').strip()
+        if single:
+            return [p.strip() for p in re.split(r'[,;]+', single) if p.strip()]
+    return []
+
+
+def _student_section_tokens(section_raw):
+    return {p.strip().lower() for p in re.split(r'[,;]+', section_raw or '') if p.strip()}
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_attendance_date_wise_excel_view(request):
+    """Admin: one sheet per request — roll number, name, branch, section, subject, date, attended hours, total hours.
+    Optional filters: from_date, to_date (YYYY-MM-DD), branch (repeat or comma), year, section, subject."""
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    if not is_admin:
+        return Response({"detail": "Admin only."}, status=403)
+
+    branches = _parse_query_multi(request, 'branch', 'branches')
+    years = _parse_query_multi(request, 'year', 'years')
+    sections = _parse_query_multi(request, 'section', 'sections')
+    subjects = _parse_query_multi(request, 'subject', 'subjects')
+
+    branch_lower = {b.lower() for b in branches}
+    year_set = set(years)
+    section_lower = {s.lower() for s in sections}
+    subject_lower = {s.lower() for s in subjects}
+
+    from_date_str = (request.query_params.get('from_date') or '').strip()
+    to_date_str = (request.query_params.get('to_date') or '').strip()
+    from_date = to_date = None
+    try:
+        if from_date_str:
+            from_date = datetime.date.fromisoformat(from_date_str)
+        if to_date_str:
+            to_date = datetime.date.fromisoformat(to_date_str)
+    except ValueError:
+        from_date = to_date = None
+
+    qs = (
+        Attendance.objects.select_related('student')
+        .filter(student__role='student')
+        .order_by('date', 'student__roll_number', 'subject', 'id')
+    )
+    if from_date:
+        qs = qs.filter(date__gte=from_date)
+    if to_date:
+        qs = qs.filter(date__lte=to_date)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Date wise'
+    ws.append(
+        ['Roll number', 'Name', 'Branch', 'Section', 'Subject', 'Date', 'Attended hours', 'Total hours'],
+    )
+
+    for a in qs.iterator(chunk_size=500):
+        stu = a.student
+        dept = (stu.department or '').strip()
+        if branch_lower and dept.lower() not in branch_lower:
+            continue
+        yr = (stu.year or '').strip()
+        if year_set and yr not in year_set:
+            continue
+        sec_display = (stu.section or '').strip()
+        if section_lower and not section_lower.intersection(_student_section_tokens(sec_display)):
+            continue
+        subj = (a.subject or '').strip()
+        if subject_lower and subj.lower() not in subject_lower:
+            continue
+
+        th = a.total_hours
+        h = a.hours
+        status_l = str(a.status or '').lower()
+        if th is not None and float(th) > 0:
+            tot_h = float(th)
+            if h is not None:
+                att_h = float(h)
+            else:
+                att_h = tot_h if status_l == 'present' else 0.0
+        else:
+            tot_h = 1.0
+            att_h = 1.0 if status_l == 'present' else 0.0
+
+        ws.append(
+            [
+                stu.roll_number or '',
+                stu.full_name or stu.username or '',
+                dept,
+                sec_display,
+                subj,
+                a.date.isoformat() if a.date else '',
+                att_h,
+                tot_h,
+            ],
+        )
+
+    fname = f'attendance_date_wise_{datetime.date.today().isoformat()}.xlsx'
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{fname}"'
+    wb.save(response)
+    return response
+
+
 def _parse_float_cell(value):
     """Parse a cell value to float; return None if empty or invalid."""
     if value is None or (isinstance(value, str) and value.strip() == ''):

@@ -6,6 +6,7 @@ from .views import (
     section_list_view, section_detail_view,
     subject_list_view, subject_detail_view,
     bulk_student_upload_view, export_attendance_excel_view,
+    export_attendance_date_wise_excel_view,
     bulk_attendance_upload_view,
 )
 
@@ -23,5 +24,6 @@ urlpatterns = [
     path('subjects/<int:pk>/', subject_detail_view),
     path('students/bulk-upload/', bulk_student_upload_view),
     path('export/attendance-data/', export_attendance_excel_view),
+    path('export/attendance-date-wise/', export_attendance_date_wise_excel_view),
     path('attendance/bulk-upload/', bulk_attendance_upload_view),
 ]

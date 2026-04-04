@@ -91,6 +91,7 @@ export const AdminLayout: React.FC = () => {
   const { user, logout, updateSessionUser } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isImporting, setIsImporting] = useState(false);
+  const [isDownloadingDateWise, setIsDownloadingDateWise] = useState(false);
   const [isFacultyDialogOpen, setIsFacultyDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedFaculty, setSelectedFaculty] = useState<string | null>(null);
@@ -1670,6 +1671,49 @@ export const AdminLayout: React.FC = () => {
       toast({ title: 'Download started', description: 'Excel file is downloading.' });
     } catch {
       toast({ title: 'Download failed', description: 'Network error while downloading Excel file.', variant: 'destructive' });
+    }
+  };
+
+  const handleDownloadDateWiseExcel = async () => {
+    setIsDownloadingDateWise(true);
+    try {
+      const params = new URLSearchParams();
+      if (attReportFromDate) params.set('from_date', format(attReportFromDate, 'yyyy-MM-dd'));
+      if (attReportToDate) params.set('to_date', format(attReportToDate, 'yyyy-MM-dd'));
+      attRecordFilterBranches.forEach((b) => params.append('branch', b));
+      attRecordFilterYears.forEach((y) => params.append('year', y));
+      attRecordFilterSections.forEach((s) => params.append('section', s));
+      attRecordFilterSubjects.forEach((s) => params.append('subject', s));
+      const qs = params.toString();
+      const res = await fetch(
+        apiUrl(qs ? `/api/export/attendance-date-wise/?${qs}` : '/api/export/attendance-date-wise/'),
+        { method: 'GET', credentials: 'include' },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg =
+          (data && (data.detail || data.error)) || 'Download failed. Make sure you are logged in as Admin.';
+        toast({ title: 'Download failed', description: String(msg), variant: 'destructive' });
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance_date_wise_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast({ title: 'Download started', description: 'Date-wise attendance Excel is downloading.' });
+    } catch {
+      toast({
+        title: 'Download failed',
+        description: 'Network error while downloading Excel file.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDownloadingDateWise(false);
     }
   };
 
@@ -3548,7 +3592,7 @@ export const AdminLayout: React.FC = () => {
                 <CardHeader>
                   <CardTitle>Generate Reports</CardTitle>
                   <CardDescription>
-                    Filter by branch, year, section, subject, and date range. Subject-wise and section-wise CSV exports include only rows that match your selections (leave a filter empty to include all values for that field). These filters are shared with the Attendance Records tab.
+                    Filter by branch, year, section, subject, and date range. Subject-wise and section-wise CSV exports, and the date-wise Excel export, use the same rules (leave a filter empty to include all values for that field). These filters are shared with the Attendance Records tab.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -3749,7 +3793,7 @@ export const AdminLayout: React.FC = () => {
                       {attRecords.length !== filteredAttRecords.length ? ` of ${attRecords.length} loaded` : ''}.
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={handleDownloadSubjectWise}>
                       <Download className="w-5 h-5 mb-2 self-center" />
                       <div className="text-left">
@@ -3762,6 +3806,24 @@ export const AdminLayout: React.FC = () => {
                       <div className="text-left">
                         <div className="font-medium">Section-wise Report</div>
                         <div className="text-sm text-muted-foreground">Same columns, sorted by section (CSV)</div>
+                      </div>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="justify-start h-auto p-4 flex-col items-start"
+                      onClick={handleDownloadDateWiseExcel}
+                      disabled={isDownloadingDateWise}
+                    >
+                      {isDownloadingDateWise ? (
+                        <RefreshCw className="w-5 h-5 mb-2 self-center animate-spin" />
+                      ) : (
+                        <FileSpreadsheet className="w-5 h-5 mb-2 self-center" />
+                      )}
+                      <div className="text-left">
+                        <div className="font-medium">Date-wise Excel</div>
+                        <div className="text-sm text-muted-foreground">
+                          One row per record: roll, name, branch, section, subject, date, attended &amp; total hours
+                        </div>
                       </div>
                     </Button>
                     <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={handleDownloadDefaultersReport}>
