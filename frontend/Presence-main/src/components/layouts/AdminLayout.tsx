@@ -290,7 +290,19 @@ export const AdminLayout: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'branches' && activeTab !== 'subjects' && activeTab !== 'sections' && activeTab !== 'students' && activeTab !== 'student-detention' && activeTab !== 'faculty' && activeTab !== 'mark-attendance' && activeTab !== 'attendance-records') return;
+    if (
+      activeTab !== 'branches' &&
+      activeTab !== 'subjects' &&
+      activeTab !== 'sections' &&
+      activeTab !== 'students' &&
+      activeTab !== 'student-detention' &&
+      activeTab !== 'faculty' &&
+      activeTab !== 'mark-attendance' &&
+      activeTab !== 'attendance-records' &&
+      activeTab !== 'reports'
+    ) {
+      return;
+    }
     const fetchDepartments = async () => {
       setDepartmentsLoading(true);
       try {
@@ -309,7 +321,16 @@ export const AdminLayout: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'sections' && activeTab !== 'mark-attendance' && activeTab !== 'students' && activeTab !== 'student-detention' && activeTab !== 'attendance-records') return;
+    if (
+      activeTab !== 'sections' &&
+      activeTab !== 'mark-attendance' &&
+      activeTab !== 'students' &&
+      activeTab !== 'student-detention' &&
+      activeTab !== 'attendance-records' &&
+      activeTab !== 'reports'
+    ) {
+      return;
+    }
     setSectionsLoading(true);
     fetch(apiUrl('/api/sections/'), { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
@@ -329,7 +350,15 @@ export const AdminLayout: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'subjects' && activeTab !== 'faculty' && activeTab !== 'mark-attendance' && activeTab !== 'attendance-records') return;
+    if (
+      activeTab !== 'subjects' &&
+      activeTab !== 'faculty' &&
+      activeTab !== 'mark-attendance' &&
+      activeTab !== 'attendance-records' &&
+      activeTab !== 'reports'
+    ) {
+      return;
+    }
     const fetchSubjects = async () => {
       setSubjectsLoading(true);
       try {
