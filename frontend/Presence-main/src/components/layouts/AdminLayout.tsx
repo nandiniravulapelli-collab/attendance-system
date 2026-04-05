@@ -3823,43 +3823,59 @@ export const AdminLayout: React.FC = () => {
                     </p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                    <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={handleDownloadSubjectWise}>
-                      <Download className="w-5 h-5 mb-2 self-center" />
-                      <div className="text-left">
+                    <Button
+                      variant="outline"
+                      className="h-auto w-full min-w-0 flex-col items-stretch justify-start gap-2 p-4 whitespace-normal text-left"
+                      onClick={handleDownloadSubjectWise}
+                    >
+                      <Download className="mx-auto h-5 w-5 shrink-0" />
+                      <div className="min-w-0 w-full text-left">
                         <div className="font-medium">Subject-wise Report</div>
-                        <div className="text-sm text-muted-foreground">CSV: student × subject totals (attended vs scheduled hours)</div>
-                      </div>
-                    </Button>
-                    <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={handleDownloadSectionWise}>
-                      <Download className="w-5 h-5 mb-2 self-center" />
-                      <div className="text-left">
-                        <div className="font-medium">Section-wise Report</div>
-                        <div className="text-sm text-muted-foreground">Same columns, sorted by section (CSV)</div>
+                        <div className="break-words text-sm text-muted-foreground">
+                          CSV: student × subject totals (attended vs scheduled hours)
+                        </div>
                       </div>
                     </Button>
                     <Button
                       variant="outline"
-                      className="justify-start h-auto p-4 flex-col items-start"
+                      className="h-auto w-full min-w-0 flex-col items-stretch justify-start gap-2 p-4 whitespace-normal text-left"
+                      onClick={handleDownloadSectionWise}
+                    >
+                      <Download className="mx-auto h-5 w-5 shrink-0" />
+                      <div className="min-w-0 w-full text-left">
+                        <div className="font-medium">Section-wise Report</div>
+                        <div className="break-words text-sm text-muted-foreground">Same columns, sorted by section (CSV)</div>
+                      </div>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-auto w-full min-w-0 flex-col items-stretch justify-start gap-2 p-4 whitespace-normal text-left"
                       onClick={handleDownloadDateWiseExcel}
                       disabled={isDownloadingDateWise}
                     >
                       {isDownloadingDateWise ? (
-                        <RefreshCw className="w-5 h-5 mb-2 self-center animate-spin" />
+                        <RefreshCw className="mx-auto h-5 w-5 shrink-0 animate-spin" />
                       ) : (
-                        <FileSpreadsheet className="w-5 h-5 mb-2 self-center" />
+                        <FileSpreadsheet className="mx-auto h-5 w-5 shrink-0" />
                       )}
-                      <div className="text-left">
+                      <div className="min-w-0 w-full text-left">
                         <div className="font-medium">Date-wise Excel</div>
-                        <div className="text-sm text-muted-foreground">
+                        <div className="break-words text-sm text-muted-foreground">
                           One row per record: roll, name, branch, section, subject, date, attended &amp; total hours
                         </div>
                       </div>
                     </Button>
-                    <Button variant="outline" className="justify-start h-auto p-4 flex-col items-start" onClick={handleDownloadDefaultersReport}>
-                      <Download className="w-5 h-5 mb-2 self-center" />
-                      <div className="text-left">
+                    <Button
+                      variant="outline"
+                      className="h-auto w-full min-w-0 flex-col items-stretch justify-start gap-2 p-4 whitespace-normal text-left"
+                      onClick={handleDownloadDefaultersReport}
+                    >
+                      <Download className="mx-auto h-5 w-5 shrink-0" />
+                      <div className="min-w-0 w-full text-left">
                         <div className="font-medium">Defaulters List</div>
-                        <div className="text-sm text-muted-foreground">Download CSV — students below 85% attendance</div>
+                        <div className="break-words text-sm text-muted-foreground">
+                          Download CSV — students below 85% attendance
+                        </div>
                       </div>
                     </Button>
                   </div>
