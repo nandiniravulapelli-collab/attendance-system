@@ -45,7 +45,8 @@ import {
   XCircle,
   Clock,
   Lock,
-  Search
+  Search,
+  FileDown,
 } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -53,6 +54,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/api';
+import { downloadSampleExcel } from '@/lib/downloadSampleExcel';
 import { formatStudentSectionsDisplay, parseStudentSections, studentMatchesAnySection } from '@/lib/studentSections';
 import { aggregateAttendanceHoursByStudentSubject, ATTENDANCE_REPORT_CSV_HEADERS } from '@/lib/attendanceReportCsv';
 
@@ -1647,7 +1649,7 @@ export const AdminLayout: React.FC = () => {
           title: 'Import completed',
           description: `Created ${created} students. Skipped ${skippedExisting} existing and ${skippedInvalid} invalid rows.`,
         });
-        if (created > 0 && activeTab === 'students') {
+        if (created > 0 && (activeTab === 'students' || activeTab === 'reports')) {
           const r = await fetch(apiUrl('/api/users/?role=student'), { credentials: 'include' });
           if (r.ok) {
             const list = await r.json();
@@ -1930,6 +1932,16 @@ export const AdminLayout: React.FC = () => {
                 <div className="flex gap-2 flex-wrap">
                   <Button onClick={() => { setAddStudentForm({ full_name: '', roll_number: '', email: '', password: '', department: '', sections: [], year: '1', phone: '' }); setAddStudentOpen(true); }}>
                     <UserPlus className="w-4 h-4 mr-2" /> Add Student
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      downloadSampleExcel('/api/samples/student-registration/', 'sample_student_registration.xlsx')
+                    }
+                  >
+                    <FileDown className="w-4 h-4 mr-2" />
+                    Sample student Excel
                   </Button>
                   <input type="file" accept=".xlsx" className="hidden" id="students-bulk-import" onChange={handleImportFromExcel} />
                   <Button variant="outline" asChild disabled={isImporting}>
@@ -3293,7 +3305,17 @@ export const AdminLayout: React.FC = () => {
                 <CardTitle>Bulk Attendance Upload</CardTitle>
                 <CardDescription>Upload an Excel (.xlsx) file with roll_number, subject, date/dates, and attended_hours/total_hours or status.</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    downloadSampleExcel('/api/samples/bulk-attendance/', 'sample_bulk_attendance.xlsx')
+                  }
+                >
+                  <FileDown className="w-4 h-4 mr-2" />
+                  Sample attendance Excel
+                </Button>
                 <input type="file" accept=".xlsx" onChange={handleBulkAttendanceUpload} disabled={isUploadingAttendance} className="hidden" id="admin-bulk-attendance" />
                 <Button asChild variant="outline" disabled={isUploadingAttendance}>
                   <label htmlFor="admin-bulk-attendance" className="cursor-pointer flex items-center justify-center">
@@ -3561,39 +3583,52 @@ export const AdminLayout: React.FC = () => {
                     </div>
                     
                     <div className="space-y-2">
-                      <h3 className="font-medium">Import Data</h3>
+                      <h3 className="font-medium">Import students (bulk)</h3>
                       <p className="text-sm text-muted-foreground">
-                        Upload Excel file to import/update all data. Credentials will be imported from the file.
+                        Upload <code className="text-xs bg-muted px-1 rounded">.xlsx</code> with columns: full_name, roll_number, email, department, section, year. Download the sample for the exact layout.
                       </p>
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept=".xlsx,.xls"
-                          onChange={handleImportFromExcel}
-                          disabled={isImporting}
-                          className="hidden"
-                          id="excel-import"
-                        />
-                        <Button 
-                          asChild
-                          variant="outline"
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
                           className="w-full"
-                          disabled={isImporting}
+                          onClick={() =>
+                            downloadSampleExcel('/api/samples/student-registration/', 'sample_student_registration.xlsx')
+                          }
                         >
-                          <label htmlFor="excel-import" className="cursor-pointer flex items-center justify-center">
-                            {isImporting ? (
-                              <>
-                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                Importing...
-                              </>
-                            ) : (
-                              <>
-                                <Upload className="w-4 h-4 mr-2" />
-                                Import from Excel
-                              </>
-                            )}
-                          </label>
+                          <FileDown className="w-4 h-4 mr-2" />
+                          Download sample student Excel
                         </Button>
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={handleImportFromExcel}
+                            disabled={isImporting}
+                            className="hidden"
+                            id="excel-import"
+                          />
+                          <Button
+                            asChild
+                            variant="outline"
+                            className="w-full"
+                            disabled={isImporting}
+                          >
+                            <label htmlFor="excel-import" className="cursor-pointer flex items-center justify-center">
+                              {isImporting ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                  Importing...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4 mr-2" />
+                                  Import from Excel
+                                </>
+                              )}
+                            </label>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -3887,7 +3922,17 @@ export const AdminLayout: React.FC = () => {
                   <CardTitle>Bulk Attendance Upload</CardTitle>
                   <CardDescription>Upload Excel (.xlsx) with roll_number, subject, date/dates, attended_hours/total_hours or status.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      downloadSampleExcel('/api/samples/bulk-attendance/', 'sample_bulk_attendance.xlsx')
+                    }
+                  >
+                    <FileDown className="w-4 h-4 mr-2" />
+                    Sample attendance Excel
+                  </Button>
                   <input type="file" accept=".xlsx" onChange={handleBulkAttendanceUpload} disabled={isUploadingAttendance} className="hidden" id="reports-bulk-attendance" />
                   <Button asChild variant="outline" disabled={isUploadingAttendance}>
                     <label htmlFor="reports-bulk-attendance" className="cursor-pointer flex items-center justify-center">

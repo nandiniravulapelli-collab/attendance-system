@@ -1250,3 +1250,108 @@ def bulk_attendance_upload_view(request):
             "errors": error_rows,
         }
     )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sample_student_registration_excel_view(request):
+    """Admin: downloadable .xlsx matching students/bulk-upload column requirements."""
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    if not is_admin:
+        return Response({"detail": "Admin only."}, status=403)
+
+    dept_code = (
+        Department.objects.order_by('code').values_list('code', flat=True).first() or 'CSE'
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Students'
+    ws.append(['full_name', 'roll_number', 'email', 'department', 'section', 'year'])
+    ws.append(['Jane Doe', '21ABC001', 'jane.doe@example.com', dept_code, 'A', '2'])
+    ws.append(['John Smith', '21ABC002', 'john.smith@example.com', dept_code, 'A,B', '2'])
+
+    ins = wb.create_sheet('Instructions')
+    ins.append(['Template for Admin → Students → Import from Excel (.xlsx).'])
+    ins.append([])
+    ins.append(['Row 1 must be the header with these exact column names (case-insensitive):'])
+    ins.append(['full_name, roll_number, email, department, section, year'])
+    ins.append([])
+    ins.append(['Replace example rows with real students before importing.'])
+    ins.append(['roll_number and email are required per row; duplicate roll numbers are skipped.'])
+    ins.append(['section: comma or semicolon for multiple (e.g. A,B).'])
+    ins.append(['department: branch code as in Admin → Branches (sample uses: ' + dept_code + ').'])
+    ins.append(['Initial password for new students = roll_number.'])
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = 'attachment; filename="sample_student_registration.xlsx"'
+    wb.save(response)
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sample_bulk_attendance_excel_view(request):
+    """Admin or faculty: downloadable .xlsx matching attendance/bulk-upload formats."""
+    if request.user.role not in ['admin', 'faculty'] and not request.user.is_superuser:
+        return Response({"detail": "Forbidden."}, status=403)
+
+    rolls = list(
+        User.objects.filter(role='student')
+        .exclude(roll_number__isnull=True)
+        .exclude(roll_number__exact='')
+        .order_by('id')
+        .values_list('roll_number', flat=True)[:2]
+    )
+    sample_roll = rolls[0] if rolls else '21ABC001'
+    sample_roll_b = (
+        rolls[1]
+        if len(rolls) > 1
+        else ('21ABC002' if sample_roll != '21ABC002' else '21ABC003')
+    )
+
+    sample_subj = (
+        Subject.objects.order_by('year', 'semester', 'code')
+        .values_list('code', flat=True)
+        .first()
+        or 'SUBJECT_CODE'
+    )
+
+    today = datetime.date.today().isoformat()
+    yday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Attendance'
+    ws.append(['roll_number', 'subject', 'date', 'attended_hours', 'total_hours'])
+    ws.append([sample_roll, sample_subj, today, 1, 1])
+    ws.append([sample_roll, sample_subj, yday, 0, 1])
+
+    alt = wb.create_sheet('Example_with_status')
+    alt.append(['roll_number', 'subject', 'date', 'status'])
+    alt.append([sample_roll_b, sample_subj, today, 'present'])
+    alt.append([sample_roll_b, sample_subj, yday, 'absent'])
+
+    multi = wb.create_sheet('Example_multiple_dates')
+    multi.append(['roll_number', 'subject', 'dates', 'attended_hours', 'total_hours'])
+    multi.append([sample_roll, sample_subj, f'{yday}; {today}', '1; 0', '1; 1'])
+
+    ins = wb.create_sheet('Instructions')
+    ins.append(['Bulk attendance upload uses the FIRST sheet (Attendance) by default in Excel.'])
+    ins.append(['For upload, use ONE sheet with ONE header row: either the Attendance layout or Example_with_status layout.'])
+    ins.append([])
+    ins.append(['Required: roll_number, subject, and date OR dates (comma/semicolon separated).'])
+    ins.append(['subject: must match a subject name or code in Admin → Subjects.'])
+    ins.append(['Either provide attended_hours AND total_hours, OR provide status (present/absent).'])
+    ins.append(['Other tabs in this file are reference only — copy one layout to your own file for upload.'])
+    ins.append([])
+    ins.append(['Sample roll/subject filled from your database when available; replace as needed.'])
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = 'attachment; filename="sample_bulk_attendance.xlsx"'
+    wb.save(response)
+    return response

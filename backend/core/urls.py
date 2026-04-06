@@ -8,6 +8,8 @@ from .views import (
     bulk_student_upload_view, export_attendance_excel_view,
     export_attendance_date_wise_excel_view,
     bulk_attendance_upload_view,
+    sample_student_registration_excel_view,
+    sample_bulk_attendance_excel_view,
 )
 
 urlpatterns = [
@@ -26,4 +28,6 @@ urlpatterns = [
     path('export/attendance-data/', export_attendance_excel_view),
     path('export/attendance-date-wise/', export_attendance_date_wise_excel_view),
     path('attendance/bulk-upload/', bulk_attendance_upload_view),
+    path('samples/student-registration/', sample_student_registration_excel_view),
+    path('samples/bulk-attendance/', sample_bulk_attendance_excel_view),
 ]

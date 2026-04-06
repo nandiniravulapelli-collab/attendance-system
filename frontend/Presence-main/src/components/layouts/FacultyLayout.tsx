@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiUrl } from '@/lib/api';
+import { downloadSampleExcel } from '@/lib/downloadSampleExcel';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -1685,7 +1686,18 @@ export const FacultyLayout: React.FC = () => {
                 <p className="text-sm text-muted-foreground">
                   The file is processed on the server. Existing attendance for the same student + subject + date is skipped.
                 </p>
-                <div className="relative">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={() =>
+                      downloadSampleExcel('/api/samples/bulk-attendance/', 'sample_bulk_attendance.xlsx')
+                    }
+                  >
+                    <FileDown className="w-4 h-4 mr-2" />
+                    Sample attendance Excel
+                  </Button>
                   <input
                     type="file"
                     accept=".xlsx"
@@ -1697,7 +1709,7 @@ export const FacultyLayout: React.FC = () => {
                   <Button
                     asChild
                     variant="outline"
-                    className="w-full md:w-auto"
+                    className="w-full sm:w-auto"
                     disabled={isUploadingAttendance}
                   >
                     <label
