@@ -304,9 +304,45 @@ export const StudentLayout: React.FC = () => {
   }));
 
   const pieData = [
-    { name: 'Present', value: overallStats.presentClasses, color: '#10B981' },
-    { name: 'Absent', value: overallStats.totalClasses - overallStats.presentClasses, color: '#EF4444' }
+    {
+      name: 'Present (classes)',
+      value: Math.round(overallStats.attendedHours * 100) / 100,
+      color: '#10B981',
+    },
+    {
+      name: 'Absent (classes)',
+      value: Math.max(
+        0,
+        Math.round((overallStats.totalHours - overallStats.attendedHours) * 100) / 100,
+      ),
+      color: '#EF4444',
+    },
   ];
+
+  const overallDateMetrics = (() => {
+    if (!apiAttendance?.records?.length) {
+      return { attendedDays: 0, totalDays: 0 };
+    }
+    const byDate: Record<string, { attended: number; total: number }> = {};
+    apiAttendance.records.forEach(
+      (r: { date?: string; status?: string; hours?: number | null; total_hours?: number | null }) => {
+        const dateKey = String(r.date || '').slice(0, 10);
+        if (!dateKey) return;
+        const th = r.total_hours != null && Number(r.total_hours) > 0 ? Number(r.total_hours) : 1;
+        const ah =
+          r.hours != null ? Number(r.hours) : r.status?.toLowerCase() === 'present' ? th : 0;
+        const clampedAh = Math.max(0, Math.min(th, ah));
+        if (!byDate[dateKey]) byDate[dateKey] = { attended: 0, total: 0 };
+        byDate[dateKey].total += th;
+        byDate[dateKey].attended += clampedAh;
+      },
+    );
+    const totalDays = Object.keys(byDate).length;
+    const attendedDays = Object.values(byDate).filter(
+      (d) => d.attended > 0 && d.total > 0,
+    ).length;
+    return { attendedDays, totalDays };
+  })();
 
   const getAttendanceStatus = () => {
     if (overallPercentage >= 90) return { status: 'excellent', color: 'success', message: 'Excellent attendance!' };
@@ -428,8 +464,12 @@ export const StudentLayout: React.FC = () => {
                   <Calendar className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{overallStats.totalClasses}</div>
-                  <p className="text-xs text-muted-foreground">All subjects combined</p>
+                  <div className="text-2xl font-bold">
+                    {Math.round(overallStats.totalHours * 100) / 100}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    All subjects combined (1 hour = 1 class)
+                  </p>
                 </CardContent>
               </Card>
 
@@ -439,8 +479,10 @@ export const StudentLayout: React.FC = () => {
                   <CheckCircle className="h-4 w-4 text-success" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-success">{overallStats.presentClasses}</div>
-                  <p className="text-xs text-muted-foreground">Present in class</p>
+                  <div className="text-2xl font-bold text-success">
+                    {Math.round(overallStats.attendedHours * 100) / 100}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Present in class (hours)</p>
                 </CardContent>
               </Card>
 
@@ -451,7 +493,11 @@ export const StudentLayout: React.FC = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-destructive">
-                    {overallStats.totalClasses - overallStats.presentClasses}
+                    {Math.max(
+                      0,
+                      Math.round((overallStats.totalHours - overallStats.attendedHours) * 100) /
+                        100,
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">Absent from class</p>
                 </CardContent>
@@ -467,7 +513,12 @@ export const StudentLayout: React.FC = () => {
                   <p className="text-xs text-muted-foreground">
                     {attendanceStatus.message}
                     {apiAttendance?.total_hours != null && apiAttendance.total_hours > 0 && (
-                      <> · {(apiAttendance.total_attended_hours ?? 0).toFixed(1)} / {apiAttendance.total_hours.toFixed(1)} hours</>
+                      <>
+                        {' '}
+                        · {(apiAttendance.total_attended_hours ?? 0).toFixed(1)} /{' '}
+                        {apiAttendance.total_hours.toFixed(1)} hours · {overallDateMetrics.attendedDays}{' '}
+                        / {overallDateMetrics.totalDays} days
+                      </>
                     )}
                   </p>
                 </CardContent>

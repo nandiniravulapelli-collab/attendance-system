@@ -637,29 +637,49 @@ export const FacultyLayout: React.FC = () => {
 
   const facultyDashboardMetrics = useMemo(() => {
     const records = facultyScopedRecords;
-    const presentCount = records.filter((r) => String(r.status).toLowerCase() === 'present').length;
-    const totalClasses = records.length;
-    const attendancePercentage =
-      totalClasses > 0 ? Math.round((presentCount / totalClasses) * 10000) / 100 : 0;
-
-    const byStudent: Record<number, { present: number; total: number }> = {};
+    let attendedHours = 0;
+    let totalHours = 0;
+    const byStudentHours: Record<number, { attended: number; total: number }> = {};
+    const byDate: Record<string, { attended: number; total: number }> = {};
     records.forEach((r) => {
+      const th = r.total_hours != null && Number(r.total_hours) > 0 ? Number(r.total_hours) : 1;
+      const ah = r.hours != null ? Number(r.hours) : (String(r.status).toLowerCase() === 'present' ? th : 0);
+      const clampedAh = Math.max(0, Math.min(th, ah));
+      attendedHours += clampedAh;
+      totalHours += th;
       const id = r.student;
-      if (!byStudent[id]) byStudent[id] = { present: 0, total: 0 };
-      byStudent[id].total++;
-      if (String(r.status).toLowerCase() === 'present') byStudent[id].present++;
+      if (!byStudentHours[id]) byStudentHours[id] = { attended: 0, total: 0 };
+      byStudentHours[id].total += th;
+      byStudentHours[id].attended += clampedAh;
+      const dateKey = String(r.date || '').slice(0, 10);
+      if (dateKey) {
+        if (!byDate[dateKey]) byDate[dateKey] = { attended: 0, total: 0 };
+        byDate[dateKey].total += th;
+        byDate[dateKey].attended += clampedAh;
+      }
     });
+    const totalClasses = Math.round(totalHours * 100) / 100;
+    const presentCount = Math.round(attendedHours * 100) / 100;
+    const attendancePercentage =
+      totalHours > 0 ? Math.round((attendedHours / totalHours) * 10000) / 100 : 0;
+
     let defaultersCount = 0;
     facultyScopedStudents.forEach((s) => {
-      const stat = byStudent[s.id] || { present: 0, total: 0 };
-      const pct = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
+      const stat = byStudentHours[s.id] || { attended: 0, total: 0 };
+      const pct = stat.total > 0 ? (stat.attended / stat.total) * 100 : 0;
       if (pct < 85) defaultersCount++;
     });
+    const totalDays = Object.keys(byDate).length;
+    const attendedDays = Object.values(byDate).filter((d) => d.attended > 0 && d.total > 0).length;
 
     return {
       attendancePercentage,
       presentCount,
       totalClasses,
+      attendedHours: Math.round(attendedHours * 100) / 100,
+      totalHours: Math.round(totalHours * 100) / 100,
+      attendedDays,
+      totalDays,
       defaultersCount,
     };
   }, [facultyScopedRecords, facultyScopedStudents]);
@@ -912,12 +932,17 @@ export const FacultyLayout: React.FC = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {facultyDashboardMetrics.totalClasses > 0 ? `${facultyDashboardMetrics.attendancePercentage}%` : '—'}
+                    {facultyDashboardMetrics.totalHours > 0 ? `${facultyDashboardMetrics.attendancePercentage}%` : '—'}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {facultyDashboardMetrics.totalClasses > 0
-                      ? `${facultyDashboardMetrics.presentCount} / ${facultyDashboardMetrics.totalClasses} records`
-                      : 'No attendance data yet for your students'}
+                    {facultyDashboardMetrics.totalHours > 0 ? (
+                      <>
+                        {facultyDashboardMetrics.attendedHours} / {facultyDashboardMetrics.totalHours} classes ·{' '}
+                        {facultyDashboardMetrics.attendedDays} / {facultyDashboardMetrics.totalDays} days
+                      </>
+                    ) : (
+                      'No attendance data yet for your students'
+                    )}
                   </p>
                 </CardContent>
               </Card>
