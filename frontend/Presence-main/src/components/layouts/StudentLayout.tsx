@@ -219,8 +219,26 @@ export const StudentLayout: React.FC = () => {
   const [fromDate, setFromDate] = useState<Date | null>(null);
   const [toDate, setToDate] = useState<Date | null>(null);
   const [showAllAttendanceOnDashboard, setShowAllAttendanceOnDashboard] = useState(false);
+  const [isStudentAttendanceFrozen, setIsStudentAttendanceFrozen] = useState(false);
+  useEffect(() => {
+    fetch(apiUrl('/api/attendance-portal-freeze/'), { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setIsStudentAttendanceFrozen(Boolean(data?.freeze_student_portal)))
+      .catch(() => setIsStudentAttendanceFrozen(false));
+  }, []);
+
+  useEffect(() => {
+    if (isStudentAttendanceFrozen && (activeTab === 'dashboard' || activeTab === 'attendance')) {
+      setActiveTab('subjects');
+    }
+  }, [isStudentAttendanceFrozen, activeTab]);
+
   useEffect(() => {
     if (numericId == null) return;
+    if (isStudentAttendanceFrozen) {
+      setApiAttendance(null);
+      return;
+    }
     const params = new URLSearchParams();
     if (fromDate) params.set('from_date', format(fromDate, 'yyyy-MM-dd'));
     if (toDate) params.set('to_date', format(toDate, 'yyyy-MM-dd'));
@@ -229,7 +247,7 @@ export const StudentLayout: React.FC = () => {
       .then(res => res.ok ? res.json() : null)
       .then(data => setApiAttendance(data))
       .catch(() => setApiAttendance(null));
-  }, [numericId, fromDate, toDate]);
+  }, [numericId, fromDate, toDate, isStudentAttendanceFrozen]);
 
   const bySubject: Record<string, { present: number; total: number; attendedHours: number; totalHours: number }> = {};
   if (apiAttendance?.records) {
@@ -335,11 +353,20 @@ export const StudentLayout: React.FC = () => {
       <div className="p-4 sm:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6 flex flex-wrap gap-1.5 h-auto p-1.5 rounded-xl bg-muted/80">
-            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            <TabsTrigger value="attendance">My Attendance</TabsTrigger>
+            <TabsTrigger value="dashboard" disabled={isStudentAttendanceFrozen}>Dashboard</TabsTrigger>
+            <TabsTrigger value="attendance" disabled={isStudentAttendanceFrozen}>My Attendance</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
+          {isStudentAttendanceFrozen && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Attendance portal frozen</AlertTitle>
+              <AlertDescription>
+                Admin has temporarily frozen student attendance access. You can still use Subjects and Profile.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-6 mt-6">

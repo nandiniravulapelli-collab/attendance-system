@@ -81,6 +81,7 @@ export const FacultyLayout: React.FC = () => {
   const [apiSubjects, setApiSubjects] = useState<ApiSubject[]>([]);
   const [apiSections, setApiSections] = useState<Array<{ id: number; name: string }>>([]);
   const [isUploadingAttendance, setIsUploadingAttendance] = useState(false);
+  const [isFacultyAttendanceFrozen, setIsFacultyAttendanceFrozen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [changePasswordForm, setChangePasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
   const [apiProfile, setApiProfile] = useState<{
@@ -248,6 +249,19 @@ export const FacultyLayout: React.FC = () => {
   }, [facultyDeptCodes.length, selectedBranches.length]);
 
   useEffect(() => {
+    fetch(apiUrl('/api/attendance-portal-freeze/'), { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setIsFacultyAttendanceFrozen(Boolean(data?.freeze_faculty_portal) && user?.role === 'faculty'))
+      .catch(() => setIsFacultyAttendanceFrozen(false));
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (isFacultyAttendanceFrozen && (activeTab === 'attendance' || activeTab === 'student-attendance' || activeTab === 'reports')) {
+      setActiveTab('dashboard');
+    }
+  }, [isFacultyAttendanceFrozen, activeTab]);
+
+  useEffect(() => {
     if (facultyDeptCodes.length === 0) {
       setApiStudents([]);
       return;
@@ -271,11 +285,15 @@ export const FacultyLayout: React.FC = () => {
 
   useEffect(() => {
     if (user?.role !== 'faculty' && user?.role !== 'admin') return;
+    if (isFacultyAttendanceFrozen) {
+      setAttendanceRecords([]);
+      return;
+    }
     fetch(apiUrl('/api/attendance/'), { credentials: 'include' })
       .then(res => res.ok ? res.json() : { records: [] })
       .then((data: { records?: Array<{ student: number; subject: string; date: string; status: string; hours?: number | null; total_hours?: number | null }> }) => setAttendanceRecords(data?.records ?? []))
       .catch(() => setAttendanceRecords([]));
-  }, [user?.role, activeTab]);
+  }, [user?.role, activeTab, isFacultyAttendanceFrozen]);
 
   const studentsInSection = apiStudents
     .filter(s => !s.is_detained)
@@ -327,6 +345,10 @@ export const FacultyLayout: React.FC = () => {
   };
 
   const handleSaveAttendance = async () => {
+    if (isFacultyAttendanceFrozen) {
+      toast({ title: 'Attendance portal frozen', description: 'Admin has temporarily frozen faculty attendance access.', variant: 'destructive' });
+      return;
+    }
     if (selectedSubjects.length === 0 || selectedSections.length === 0) {
       toast({ title: 'Error', description: 'Please select at least one subject and one section.', variant: 'destructive' });
       return;
@@ -508,6 +530,11 @@ export const FacultyLayout: React.FC = () => {
   };
 
   const handleAttendanceUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isFacultyAttendanceFrozen) {
+      toast({ title: 'Attendance portal frozen', description: 'Admin has temporarily frozen faculty attendance access.', variant: 'destructive' });
+      event.target.value = '';
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
     setIsUploadingAttendance(true);
@@ -838,9 +865,9 @@ export const FacultyLayout: React.FC = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6 flex flex-wrap gap-1.5 h-auto p-1.5 rounded-xl bg-muted/80">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            <TabsTrigger value="attendance">Mark Attendance</TabsTrigger>
-            <TabsTrigger value="student-attendance">Student Attendance</TabsTrigger>
-            <TabsTrigger value="reports">My Reports</TabsTrigger>
+            <TabsTrigger value="attendance" disabled={isFacultyAttendanceFrozen}>Mark Attendance</TabsTrigger>
+            <TabsTrigger value="student-attendance" disabled={isFacultyAttendanceFrozen}>Student Attendance</TabsTrigger>
+            <TabsTrigger value="reports" disabled={isFacultyAttendanceFrozen}>My Reports</TabsTrigger>
             <TabsTrigger value="subjects">My Subjects</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
@@ -993,6 +1020,13 @@ export const FacultyLayout: React.FC = () => {
 
           {/* Attendance Tab */}
           <TabsContent value="attendance" className="space-y-6 mt-6">
+            {isFacultyAttendanceFrozen && (
+              <Card className="border-destructive/50 bg-destructive/5">
+                <CardContent className="pt-6 text-sm">
+                  Admin has frozen the faculty attendance portal. Marking and uploading attendance are temporarily disabled.
+                </CardContent>
+              </Card>
+            )}
             {/* Controls */}
             <Card className="border-emerald-200/50">
               <CardHeader>
@@ -1276,7 +1310,7 @@ export const FacultyLayout: React.FC = () => {
                       {selectedSubjectObjs.map(s => s.name).join(', ')} - {format(selectedDate, 'PPP')} · {sessionTotalHours} hour(s)
                     </CardDescription>
                   </div>
-                  <Button onClick={handleSaveAttendance} disabled={studentsInSection.length === 0}>
+                  <Button onClick={handleSaveAttendance} disabled={studentsInSection.length === 0 || isFacultyAttendanceFrozen}>
                     <Save className="w-4 h-4 mr-2" />
                     Save Attendance
                   </Button>
@@ -1372,6 +1406,13 @@ export const FacultyLayout: React.FC = () => {
 
           {/* Student Attendance: subject-wise and overall % */}
           <TabsContent value="student-attendance" className="space-y-6">
+            {isFacultyAttendanceFrozen && (
+              <Card className="border-destructive/50 bg-destructive/5">
+                <CardContent className="pt-6 text-sm">
+                  Admin has frozen the faculty attendance portal. Student attendance data is temporarily unavailable.
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>Student Attendance by Subject</CardTitle>
@@ -1649,6 +1690,13 @@ export const FacultyLayout: React.FC = () => {
 
           {/* Reports Tab */}
           <TabsContent value="reports">
+            {isFacultyAttendanceFrozen && (
+              <Card className="border-destructive/50 bg-destructive/5 mb-6">
+                <CardContent className="pt-6 text-sm">
+                  Admin has frozen the faculty attendance portal. Attendance uploads are temporarily disabled.
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>Attendance Reports</CardTitle>
@@ -1691,6 +1739,7 @@ export const FacultyLayout: React.FC = () => {
                     type="button"
                     variant="outline"
                     className="w-full sm:w-auto"
+                    disabled={isFacultyAttendanceFrozen}
                     onClick={() =>
                       downloadSampleExcel('/api/samples/bulk-attendance/', 'sample_bulk_attendance.xlsx')
                     }
@@ -1702,7 +1751,7 @@ export const FacultyLayout: React.FC = () => {
                     type="file"
                     accept=".xlsx"
                     onChange={handleAttendanceUpload}
-                    disabled={isUploadingAttendance}
+                    disabled={isUploadingAttendance || isFacultyAttendanceFrozen}
                     className="hidden"
                     id="attendance-bulk-upload"
                   />
@@ -1710,7 +1759,7 @@ export const FacultyLayout: React.FC = () => {
                     asChild
                     variant="outline"
                     className="w-full sm:w-auto"
-                    disabled={isUploadingAttendance}
+                    disabled={isUploadingAttendance || isFacultyAttendanceFrozen}
                   >
                     <label
                       htmlFor="attendance-bulk-upload"

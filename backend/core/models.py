@@ -77,3 +77,17 @@ class Attendance(models.Model):
 
     def __str__(self):
         return f"{self.student.username} - {self.subject} - {self.date}"
+
+
+class AttendancePortalControl(models.Model):
+    """Singleton-like control for attendance portal access by role."""
+    freeze_faculty_portal = models.BooleanField(default=False)
+    freeze_student_portal = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return (
+            f"AttendancePortalControl("
+            f"faculty={self.freeze_faculty_portal}, "
+            f"student={self.freeze_student_portal})"
+        )

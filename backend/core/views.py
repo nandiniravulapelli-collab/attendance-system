@@ -10,7 +10,7 @@ from openpyxl import load_workbook, Workbook
 import datetime
 import re
 from decimal import Decimal
-from .models import User, Attendance, Department, Subject, Section
+from .models import User, Attendance, Department, Subject, Section, AttendancePortalControl
 from .serializers import (
     RegisterSerializer, LoginSerializer, AttendanceSerializer, UserSerializer,
     DepartmentSerializer, SubjectSerializer, SectionSerializer,
@@ -43,6 +43,56 @@ def _q_user_section_token(section_name: str) -> Q:
         | Q(section__startswith=f'{n},')
         | Q(section__endswith=f',{n}')
         | Q(section__contains=f',{n},')
+    )
+
+
+def _get_attendance_portal_control() -> AttendancePortalControl:
+    ctrl = AttendancePortalControl.objects.order_by('id').first()
+    if ctrl:
+        return ctrl
+    return AttendancePortalControl.objects.create()
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def attendance_portal_freeze_view(request):
+    """Get or update attendance portal freeze flags.
+
+    GET: available to authenticated users.
+    PATCH: admin only.
+    """
+    ctrl = _get_attendance_portal_control()
+
+    if request.method == 'GET':
+        return Response(
+            {
+                "freeze_faculty_portal": bool(ctrl.freeze_faculty_portal),
+                "freeze_student_portal": bool(ctrl.freeze_student_portal),
+                "updated_at": ctrl.updated_at,
+            }
+        )
+
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    if not is_admin:
+        return Response({"detail": "Admin only."}, status=403)
+
+    data = request.data if isinstance(request.data, dict) else {}
+    changed = False
+    if 'freeze_faculty_portal' in data:
+        ctrl.freeze_faculty_portal = bool(data.get('freeze_faculty_portal'))
+        changed = True
+    if 'freeze_student_portal' in data:
+        ctrl.freeze_student_portal = bool(data.get('freeze_student_portal'))
+        changed = True
+    if changed:
+        ctrl.save(update_fields=['freeze_faculty_portal', 'freeze_student_portal', 'updated_at'])
+
+    return Response(
+        {
+            "freeze_faculty_portal": bool(ctrl.freeze_faculty_portal),
+            "freeze_student_portal": bool(ctrl.freeze_student_portal),
+            "updated_at": ctrl.updated_at,
+        }
     )
 
 
@@ -98,6 +148,11 @@ def login_view(request):
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def attendance_view(request):
+    ctrl = _get_attendance_portal_control()
+    if request.user.role == 'student' and ctrl.freeze_student_portal:
+        return Response({"detail": "Attendance portal is currently frozen for students."}, status=423)
+    if request.user.role == 'faculty' and ctrl.freeze_faculty_portal:
+        return Response({"detail": "Attendance portal is currently frozen for faculty."}, status=423)
 
     if request.method == 'GET':
         if request.user.role == 'student':
@@ -967,6 +1022,9 @@ def bulk_attendance_upload_view(request):
     """
     if request.user.role not in ['admin', 'faculty'] and not request.user.is_superuser:
         return Response({"detail": "Only admin or faculty can upload attendance."}, status=403)
+    ctrl = _get_attendance_portal_control()
+    if request.user.role == 'faculty' and ctrl.freeze_faculty_portal and not request.user.is_superuser:
+        return Response({"detail": "Attendance portal is currently frozen for faculty."}, status=423)
 
     upload = request.FILES.get('file')
     if not upload:

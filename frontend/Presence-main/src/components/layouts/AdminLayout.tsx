@@ -801,6 +801,14 @@ export const AdminLayout: React.FC = () => {
     presentClasses: number;
     totalClasses: number;
   }>>([]);
+  const [attendancePortalFreeze, setAttendancePortalFreeze] = useState<{
+    freeze_faculty_portal: boolean;
+    freeze_student_portal: boolean;
+  }>({
+    freeze_faculty_portal: false,
+    freeze_student_portal: false,
+  });
+  const [attendancePortalFreezeLoading, setAttendancePortalFreezeLoading] = useState(false);
   const [dashboardWeeklyTrend, setDashboardWeeklyTrend] = useState<Array<{ name: string; attendance: number }>>([]);
   const [dashboardDistributionPie, setDashboardDistributionPie] = useState<Array<{ name: string; value: number; color: string }>>([]);
 
@@ -815,6 +823,47 @@ export const AdminLayout: React.FC = () => {
       )
       .catch(() => setSystemAttendance(null));
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return;
+    fetch(apiUrl('/api/attendance-portal-freeze/'), { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setAttendancePortalFreeze({
+          freeze_faculty_portal: !!d.freeze_faculty_portal,
+          freeze_student_portal: !!d.freeze_student_portal,
+        });
+      })
+      .catch(() => {});
+  }, [activeTab]);
+
+  const updateAttendancePortalFreeze = async (patch: Partial<{ freeze_faculty_portal: boolean; freeze_student_portal: boolean }>) => {
+    setAttendancePortalFreezeLoading(true);
+    try {
+      const res = await fetch(apiUrl('/api/attendance-portal-freeze/'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = (data && (data.detail || data.error)) || 'Could not update freeze settings.';
+        toast({ title: 'Update failed', description: String(msg), variant: 'destructive' });
+        return;
+      }
+      setAttendancePortalFreeze({
+        freeze_faculty_portal: !!data.freeze_faculty_portal,
+        freeze_student_portal: !!data.freeze_student_portal,
+      });
+      toast({ title: 'Updated', description: 'Attendance portal freeze settings saved.' });
+    } catch {
+      toast({ title: 'Update failed', description: 'Network error.', variant: 'destructive' });
+    } finally {
+      setAttendancePortalFreezeLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (activeTab !== 'dashboard' && activeTab !== 'defaulters') return;
@@ -1898,6 +1947,63 @@ export const AdminLayout: React.FC = () => {
                 </CardContent>
               </Card>
             </div>
+
+            <Card className="border border-border/60">
+              <CardHeader>
+                <CardTitle>Attendance Portal Freeze Controls</CardTitle>
+                <CardDescription>
+                  Freeze or unfreeze attendance access for faculty and students. Admin access remains available.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">Faculty attendance portal</p>
+                      <p className="text-sm text-muted-foreground">Blocks faculty attendance view, save, and bulk upload.</p>
+                    </div>
+                    <Badge variant={attendancePortalFreeze.freeze_faculty_portal ? 'destructive' : 'secondary'}>
+                      {attendancePortalFreeze.freeze_faculty_portal ? 'Frozen' : 'Active'}
+                    </Badge>
+                  </div>
+                  <Button
+                    type="button"
+                    variant={attendancePortalFreeze.freeze_faculty_portal ? 'outline' : 'destructive'}
+                    onClick={() =>
+                      updateAttendancePortalFreeze({
+                        freeze_faculty_portal: !attendancePortalFreeze.freeze_faculty_portal,
+                      })
+                    }
+                    disabled={attendancePortalFreezeLoading}
+                  >
+                    {attendancePortalFreeze.freeze_faculty_portal ? 'Unfreeze Faculty Portal' : 'Freeze Faculty Portal'}
+                  </Button>
+                </div>
+                <div className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">Student attendance portal</p>
+                      <p className="text-sm text-muted-foreground">Blocks student attendance dashboard and records view.</p>
+                    </div>
+                    <Badge variant={attendancePortalFreeze.freeze_student_portal ? 'destructive' : 'secondary'}>
+                      {attendancePortalFreeze.freeze_student_portal ? 'Frozen' : 'Active'}
+                    </Badge>
+                  </div>
+                  <Button
+                    type="button"
+                    variant={attendancePortalFreeze.freeze_student_portal ? 'outline' : 'destructive'}
+                    onClick={() =>
+                      updateAttendancePortalFreeze({
+                        freeze_student_portal: !attendancePortalFreeze.freeze_student_portal,
+                      })
+                    }
+                    disabled={attendancePortalFreezeLoading}
+                  >
+                    {attendancePortalFreeze.freeze_student_portal ? 'Unfreeze Student Portal' : 'Freeze Student Portal'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Charts - show when backend provides trend/distribution data */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
