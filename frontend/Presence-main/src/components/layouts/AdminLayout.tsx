@@ -150,6 +150,11 @@ export const AdminLayout: React.FC = () => {
   const [studentFilterYear, setStudentFilterYear] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [defaultersSearchQuery, setDefaultersSearchQuery] = useState('');
+  const [defaulterFilterYear, setDefaulterFilterYear] = useState<string>('__all__');
+  const [defaulterFilterBranch, setDefaulterFilterBranch] = useState<string>('__all__');
+  const [defaulterFilterSection, setDefaulterFilterSection] = useState<string>('__all__');
+  const [defaulterMinPct, setDefaulterMinPct] = useState<string>('0');
+  const [defaulterMaxPct, setDefaulterMaxPct] = useState<string>('85');
   /** Students tab: filter by detention status */
   const [studentDetentionFilter, setStudentDetentionFilter] = useState<'all' | 'active' | 'detained'>('all');
   /** Detention tab: search both lists */
@@ -889,16 +894,59 @@ export const AdminLayout: React.FC = () => {
 
   const totalStudentsDisplay = backendStudentCount ?? 0;
   const defaultersCountDisplay = backendDefaulters.length;
+  const defaulterYearOptions = useMemo(() => {
+    const out = new Set<string>();
+    backendDefaulters.forEach((s) => {
+      const y = (s.year || '').trim();
+      if (y) out.add(y);
+    });
+    return Array.from(out).sort((a, b) => Number(a) - Number(b) || a.localeCompare(b));
+  }, [backendDefaulters]);
+  const defaulterBranchOptions = useMemo(() => {
+    const out = new Set<string>();
+    backendDefaulters.forEach((s) => {
+      const b = (s.department || '').trim();
+      if (b) out.add(b);
+    });
+    return Array.from(out).sort((a, b) => a.localeCompare(b));
+  }, [backendDefaulters]);
+  const defaulterSectionOptions = useMemo(() => {
+    const out = new Set<string>();
+    backendDefaulters.forEach((s) => {
+      parseStudentSections(s).forEach((sec) => {
+        const v = (sec || '').trim();
+        if (v) out.add(v);
+      });
+    });
+    return Array.from(out).sort((a, b) => a.localeCompare(b));
+  }, [backendDefaulters]);
   const defaultersToShow = useMemo(() => {
+    const minRaw = Number(defaulterMinPct);
+    const maxRaw = Number(defaulterMaxPct);
+    const minPct = Number.isFinite(minRaw) ? Math.max(0, Math.min(100, minRaw)) : 0;
+    const maxPct = Number.isFinite(maxRaw) ? Math.max(0, Math.min(100, maxRaw)) : 85;
+    const [low, high] = minPct <= maxPct ? [minPct, maxPct] : [maxPct, minPct];
     const q = defaultersSearchQuery.trim().toLowerCase();
-    if (!q) return backendDefaulters;
     return backendDefaulters.filter((s) => {
+      if (defaulterFilterYear !== '__all__' && (s.year || '').trim() !== defaulterFilterYear) return false;
+      if (defaulterFilterBranch !== '__all__' && (s.department || '').trim() !== defaulterFilterBranch) return false;
+      if (defaulterFilterSection !== '__all__' && !studentMatchesAnySection(s, [defaulterFilterSection])) return false;
+      if (s.attendancePercentage < low || s.attendancePercentage > high) return false;
+      if (!q) return true;
       const name = (s.full_name || '').toLowerCase();
       const roll = (s.roll_number || '').toLowerCase();
       const user = (s.username || '').toLowerCase();
       return name.includes(q) || roll.includes(q) || user.includes(q);
     });
-  }, [backendDefaulters, defaultersSearchQuery]);
+  }, [
+    backendDefaulters,
+    defaultersSearchQuery,
+    defaulterFilterYear,
+    defaulterFilterBranch,
+    defaulterFilterSection,
+    defaulterMinPct,
+    defaulterMaxPct,
+  ]);
 
   const attendanceData = dashboardWeeklyTrend;
   const pieData = dashboardDistributionPie;
@@ -3950,7 +3998,9 @@ export const AdminLayout: React.FC = () => {
               <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
                 <div>
                   <CardTitle>Attendance Defaulters</CardTitle>
-                  <CardDescription>Students with less than 85% attendance. Download respects the search box below.</CardDescription>
+                  <CardDescription>
+                    Filter by year, branch, section, and attendance percentage range. Download respects the selected filters and search.
+                  </CardDescription>
                 </div>
                 <Button variant="outline" className="shrink-0 rounded-xl" onClick={handleDownloadDefaultersFromTab}>
                   <Download className="w-4 h-4 mr-2" />
@@ -3958,6 +4008,100 @@ export const AdminLayout: React.FC = () => {
                 </Button>
               </CardHeader>
               <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+                  <div className="space-y-1">
+                    <Label>Year</Label>
+                    <Select value={defaulterFilterYear} onValueChange={setDefaulterFilterYear}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All years" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All years</SelectItem>
+                        {defaulterYearOptions.map((y) => (
+                          <SelectItem key={y} value={y}>Year {y}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Branch</Label>
+                    <Select value={defaulterFilterBranch} onValueChange={setDefaulterFilterBranch}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All branches" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All branches</SelectItem>
+                        {defaulterBranchOptions.map((b) => (
+                          <SelectItem key={b} value={b}>{b}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Section</Label>
+                    <Select value={defaulterFilterSection} onValueChange={setDefaulterFilterSection}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All sections" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All sections</SelectItem>
+                        {defaulterSectionOptions.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Min %</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={defaulterMinPct}
+                      onChange={(e) => setDefaulterMinPct(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Max %</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={defaulterMaxPct}
+                      onChange={(e) => setDefaulterMaxPct(e.target.value)}
+                      placeholder="85"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setDefaulterMinPct('0'); setDefaulterMaxPct('75'); }}>
+                    Below 75%
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setDefaulterMinPct('60'); setDefaulterMaxPct('75'); }}>
+                    60% to 75%
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setDefaulterMinPct('0'); setDefaulterMaxPct('85'); }}>
+                    Default (below 85%)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDefaulterFilterYear('__all__');
+                      setDefaulterFilterBranch('__all__');
+                      setDefaulterFilterSection('__all__');
+                      setDefaulterMinPct('0');
+                      setDefaulterMaxPct('85');
+                      setDefaultersSearchQuery('');
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                </div>
                 <div className="relative max-w-md mb-4">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                   <Input
