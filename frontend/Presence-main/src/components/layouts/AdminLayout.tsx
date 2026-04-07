@@ -152,9 +152,9 @@ export const AdminLayout: React.FC = () => {
   const [studentFilterYear, setStudentFilterYear] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [defaultersSearchQuery, setDefaultersSearchQuery] = useState('');
-  const [defaulterFilterYear, setDefaulterFilterYear] = useState<string>('__all__');
-  const [defaulterFilterBranch, setDefaulterFilterBranch] = useState<string>('__all__');
-  const [defaulterFilterSection, setDefaulterFilterSection] = useState<string>('__all__');
+  const [defaulterFilterYears, setDefaulterFilterYears] = useState<string[]>([]);
+  const [defaulterFilterBranches, setDefaulterFilterBranches] = useState<string[]>([]);
+  const [defaulterFilterSections, setDefaulterFilterSections] = useState<string[]>([]);
   const [defaulterMinPct, setDefaulterMinPct] = useState<string>('0');
   const [defaulterMaxPct, setDefaulterMaxPct] = useState<string>('85');
   /** Students tab: filter by detention status */
@@ -977,11 +977,14 @@ export const AdminLayout: React.FC = () => {
     const minPct = Number.isFinite(minRaw) ? Math.max(0, Math.min(100, minRaw)) : 0;
     const maxPct = Number.isFinite(maxRaw) ? Math.max(0, Math.min(100, maxRaw)) : 85;
     const [low, high] = minPct <= maxPct ? [minPct, maxPct] : [maxPct, minPct];
+    const selectedYears = new Set(defaulterFilterYears);
+    const selectedBranches = new Set(defaulterFilterBranches.map((v) => v.toLowerCase()));
+    const selectedSections = defaulterFilterSections;
     const q = defaultersSearchQuery.trim().toLowerCase();
     return backendDefaulters.filter((s) => {
-      if (defaulterFilterYear !== '__all__' && (s.year || '').trim() !== defaulterFilterYear) return false;
-      if (defaulterFilterBranch !== '__all__' && (s.department || '').trim() !== defaulterFilterBranch) return false;
-      if (defaulterFilterSection !== '__all__' && !studentMatchesAnySection(s, [defaulterFilterSection])) return false;
+      if (selectedYears.size > 0 && !selectedYears.has((s.year || '').trim())) return false;
+      if (selectedBranches.size > 0 && !selectedBranches.has((s.department || '').trim().toLowerCase())) return false;
+      if (selectedSections.length > 0 && !studentMatchesAnySection(s, selectedSections)) return false;
       if (s.attendancePercentage < low || s.attendancePercentage > high) return false;
       if (!q) return true;
       const name = (s.full_name || '').toLowerCase();
@@ -992,9 +995,9 @@ export const AdminLayout: React.FC = () => {
   }, [
     backendDefaulters,
     defaultersSearchQuery,
-    defaulterFilterYear,
-    defaulterFilterBranch,
-    defaulterFilterSection,
+    defaulterFilterYears,
+    defaulterFilterBranches,
+    defaulterFilterSections,
     defaulterMinPct,
     defaulterMaxPct,
   ]);
@@ -4289,45 +4292,114 @@ export const AdminLayout: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
                   <div className="space-y-1">
                     <Label>Year</Label>
-                    <Select value={defaulterFilterYear} onValueChange={setDefaulterFilterYear}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All years" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">All years</SelectItem>
-                        {defaulterYearOptions.map((y) => (
-                          <SelectItem key={y} value={y}>Year {y}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {defaulterFilterYears.length > 0 ? `${defaulterFilterYears.length} selected` : 'All years'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setDefaulterFilterYears(defaulterYearOptions)}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setDefaulterFilterYears([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {defaulterYearOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No years available.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {defaulterYearOptions.map((y) => (
+                              <div key={y} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`def-year-${y}`}
+                                  checked={defaulterFilterYears.includes(y)}
+                                  onCheckedChange={(checked) =>
+                                    setDefaulterFilterYears(checked ? [...defaulterFilterYears, y] : defaulterFilterYears.filter((v) => v !== y))
+                                  }
+                                />
+                                <label htmlFor={`def-year-${y}`} className="text-sm cursor-pointer">Year {y}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-1">
                     <Label>Branch</Label>
-                    <Select value={defaulterFilterBranch} onValueChange={setDefaulterFilterBranch}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All branches" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">All branches</SelectItem>
-                        {defaulterBranchOptions.map((b) => (
-                          <SelectItem key={b} value={b}>{b}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {defaulterFilterBranches.length > 0 ? `${defaulterFilterBranches.length} selected` : 'All branches'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setDefaulterFilterBranches(defaulterBranchOptions)}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setDefaulterFilterBranches([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {defaulterBranchOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No branches available.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {defaulterBranchOptions.map((b) => (
+                              <div key={b} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`def-branch-${b}`}
+                                  checked={defaulterFilterBranches.includes(b)}
+                                  onCheckedChange={(checked) =>
+                                    setDefaulterFilterBranches(checked ? [...defaulterFilterBranches, b] : defaulterFilterBranches.filter((v) => v !== b))
+                                  }
+                                />
+                                <label htmlFor={`def-branch-${b}`} className="text-sm cursor-pointer">{b}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-1">
                     <Label>Section</Label>
-                    <Select value={defaulterFilterSection} onValueChange={setDefaulterFilterSection}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All sections" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">All sections</SelectItem>
-                        {defaulterSectionOptions.map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left font-normal rounded-xl">
+                          {defaulterFilterSections.length > 0 ? `${defaulterFilterSections.length} selected` : 'All sections'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setDefaulterFilterSections(defaulterSectionOptions)}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setDefaulterFilterSections([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {defaulterSectionOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No sections available.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {defaulterSectionOptions.map((s) => (
+                              <div key={s} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`def-section-${s}`}
+                                  checked={defaulterFilterSections.includes(s)}
+                                  onCheckedChange={(checked) =>
+                                    setDefaulterFilterSections(checked ? [...defaulterFilterSections, s] : defaulterFilterSections.filter((v) => v !== s))
+                                  }
+                                />
+                                <label htmlFor={`def-section-${s}`} className="text-sm cursor-pointer">{s}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-1">
                     <Label>Min %</Label>
@@ -4369,9 +4441,9 @@ export const AdminLayout: React.FC = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setDefaulterFilterYear('__all__');
-                      setDefaulterFilterBranch('__all__');
-                      setDefaulterFilterSection('__all__');
+                      setDefaulterFilterYears([]);
+                      setDefaulterFilterBranches([]);
+                      setDefaulterFilterSections([]);
                       setDefaulterMinPct('0');
                       setDefaulterMaxPct('85');
                       setDefaultersSearchQuery('');
