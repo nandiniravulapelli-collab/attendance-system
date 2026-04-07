@@ -357,7 +357,18 @@ export const StudentLayout: React.FC = () => {
   const completeAttendance = apiAttendance?.records?.length
     ? [...apiAttendance.records]
         .sort((a, b) => (b.date > a.date ? 1 : -1))
-        .map(r => ({ subject: r.subject, date: r.date, status: r.status?.toLowerCase() || 'absent' }))
+        .map((r) => {
+          const total = r.total_hours != null && Number(r.total_hours) > 0 ? Number(r.total_hours) : 1;
+          const attended =
+            r.hours != null ? Number(r.hours) : (r.status?.toLowerCase() === 'present' ? total : 0);
+          return {
+            subject: r.subject,
+            date: r.date,
+            status: r.status?.toLowerCase() || 'absent',
+            attended: Math.max(0, Math.min(total, attended)),
+            total,
+          };
+        })
     : db.getRecentAttendance(user?.id || '');
   const dashboardSubjectOptions = Array.from(
     new Set(completeAttendance.map((r) => String(r.subject || '').trim()).filter(Boolean)),
@@ -726,6 +737,11 @@ export const StudentLayout: React.FC = () => {
                             <p className="text-sm text-muted-foreground">
                               {format(parseISO(record.date), 'PPP')}
                             </p>
+                            {'attended' in record && 'total' in record && (
+                              <p className="text-xs text-muted-foreground">
+                                Attended: {Number(record.attended).toFixed(2).replace(/\.00$/, '')} / {Number(record.total).toFixed(2).replace(/\.00$/, '')} classes (hours)
+                              </p>
+                            )}
                           </div>
                         </div>
                         <Badge variant={record.status === 'present' ? 'default' : 'destructive'}>
