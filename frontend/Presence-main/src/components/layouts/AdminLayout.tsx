@@ -1725,7 +1725,7 @@ export const AdminLayout: React.FC = () => {
     }));
   };
 
-  const handleImportFromExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportStudentsFromExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setIsImporting(true);
@@ -1757,6 +1757,106 @@ export const AdminLayout: React.FC = () => {
         const message =
           (data && (data.detail || data.error)) ||
           'Import failed. Check that the Excel file has columns: full_name, roll_number, email, department, section, year.';
+        toast({
+          title: 'Import failed',
+          description: String(message),
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'Import failed',
+        description: 'Network error while uploading file.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsImporting(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleImportFacultyFromExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(apiUrl('/api/faculty/bulk-upload/'), {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const created = typeof data.created === 'number' ? data.created : 0;
+        const skippedExisting = typeof data.skipped_existing === 'number' ? data.skipped_existing : 0;
+        const skippedInvalid = typeof data.skipped_invalid === 'number' ? data.skipped_invalid : 0;
+        toast({
+          title: 'Faculty import completed',
+          description: `Created ${created} faculty. Skipped ${skippedExisting} existing and ${skippedInvalid} invalid rows.`,
+        });
+        if (created > 0 && activeTab === 'faculty') {
+          const r = await fetch(apiUrl('/api/users/?role=faculty'), { credentials: 'include' });
+          if (r.ok) {
+            const list = await r.json();
+            setApiFaculty(Array.isArray(list) ? list : []);
+          }
+        }
+      } else {
+        const message =
+          (data && (data.detail || data.error)) ||
+          'Import failed. Check that the Excel file has columns: full_name, email, department, phone, subjects, password.';
+        toast({
+          title: 'Import failed',
+          description: String(message),
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'Import failed',
+        description: 'Network error while uploading file.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsImporting(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleImportSubjectsFromExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(apiUrl('/api/subjects/bulk-upload/'), {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const created = typeof data.created === 'number' ? data.created : 0;
+        const updated = typeof data.updated === 'number' ? data.updated : 0;
+        const skippedInvalid = typeof data.skipped_invalid === 'number' ? data.skipped_invalid : 0;
+        toast({
+          title: 'Subjects import completed',
+          description: `Created ${created}, updated ${updated}, skipped ${skippedInvalid} invalid rows.`,
+        });
+        if ((created > 0 || updated > 0) && activeTab === 'subjects') {
+          const r = await fetch(apiUrl('/api/subjects/'), { credentials: 'include' });
+          if (r.ok) {
+            const list = await r.json();
+            setApiSubjects(Array.isArray(list) ? list : []);
+          }
+        }
+      } else {
+        const message =
+          (data && (data.detail || data.error)) ||
+          'Import failed. Check that the Excel file has columns: code, name, department_codes, year, semester.';
         toast({
           title: 'Import failed',
           description: String(message),
@@ -2097,7 +2197,7 @@ export const AdminLayout: React.FC = () => {
                     <FileDown className="w-4 h-4 mr-2" />
                     Sample student Excel
                   </Button>
-                  <input type="file" accept=".xlsx" className="hidden" id="students-bulk-import" onChange={handleImportFromExcel} />
+                  <input type="file" accept=".xlsx" className="hidden" id="students-bulk-import" onChange={handleImportStudentsFromExcel} />
                   <Button variant="outline" asChild disabled={isImporting}>
                     <label htmlFor="students-bulk-import" className="cursor-pointer flex items-center">
                       {isImporting ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Importing…</> : <><Upload className="w-4 h-4 mr-2" /> Import from Excel</>}
@@ -2772,7 +2872,7 @@ export const AdminLayout: React.FC = () => {
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
                 <div>
                   <CardTitle>Subjects by Branch</CardTitle>
-                  <CardDescription>Add, edit, or remove subjects per branch, year, and semester. Each year has 2 semesters.</CardDescription>
+                  <CardDescription>Add, edit, or remove subjects per branch, year, and semester. Each year has 2 semesters, or import from Excel.</CardDescription>
                 </div>
                 <div className="flex gap-2 flex-wrap items-center">
                   <Select value={subjectFilterDept || '__all__'} onValueChange={setSubjectFilterDept}>
@@ -2802,7 +2902,39 @@ export const AdminLayout: React.FC = () => {
                       {SUBJECT_SEMESTERS.map(sem => <SelectItem key={sem} value={sem}>Sem {sem}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button onClick={handleAddSubject} disabled={apiDepartments.length === 0}><Plus className="w-4 h-4 mr-2" /> Add Subject</Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      downloadSampleExcel('/api/samples/subjects/', 'sample_subjects.xlsx')
+                    }
+                  >
+                    <FileDown className="w-4 h-4 mr-2" />
+                    Sample subjects Excel
+                  </Button>
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    className="hidden"
+                    id="subjects-bulk-import"
+                    onChange={handleImportSubjectsFromExcel}
+                  />
+                  <Button variant="outline" asChild disabled={isImporting}>
+                    <label htmlFor="subjects-bulk-import" className="cursor-pointer flex items-center">
+                      {isImporting ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Importing…
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mr-2" /> Import from Excel
+                        </>
+                      )}
+                    </label>
+                  </Button>
+                  <Button onClick={handleAddSubject} disabled={apiDepartments.length === 0}>
+                    <Plus className="w-4 h-4 mr-2" /> Add Subject
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -2940,15 +3072,47 @@ export const AdminLayout: React.FC = () => {
           <TabsContent value="faculty">
             <div className="space-y-6">
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
+                <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div>
                     <CardTitle>Faculty Management</CardTitle>
-                    <CardDescription>Add, edit, or remove faculty members</CardDescription>
+                    <CardDescription>Add, edit, remove faculty, or import from Excel.</CardDescription>
                   </div>
-                  <Button onClick={handleAddFaculty}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Faculty
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        downloadSampleExcel('/api/samples/faculty-registration/', 'sample_faculty_registration.xlsx')
+                      }
+                    >
+                      <FileDown className="w-4 h-4 mr-2" />
+                      Sample faculty Excel
+                    </Button>
+                    <input
+                      type="file"
+                      accept=".xlsx"
+                      className="hidden"
+                      id="faculty-bulk-import"
+                      onChange={handleImportFacultyFromExcel}
+                    />
+                    <Button variant="outline" asChild disabled={isImporting}>
+                      <label htmlFor="faculty-bulk-import" className="cursor-pointer flex items-center">
+                        {isImporting ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Importing…
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-2" /> Import from Excel
+                          </>
+                        )}
+                      </label>
+                    </Button>
+                    <Button onClick={handleAddFaculty}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Faculty
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {facultyLoading ? (
@@ -3757,7 +3921,7 @@ export const AdminLayout: React.FC = () => {
                           <input
                             type="file"
                             accept=".xlsx,.xls"
-                            onChange={handleImportFromExcel}
+                            onChange={handleImportStudentsFromExcel}
                             disabled={isImporting}
                             className="hidden"
                             id="excel-import"

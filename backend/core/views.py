@@ -752,6 +752,278 @@ def bulk_student_upload_view(request):
     )
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def bulk_faculty_upload_view(request):
+    """Admin: bulk create faculty from Excel (.xlsx).
+
+    Expected header columns (case-insensitive):
+    - full_name
+    - email
+    - department  (branch code, e.g. CSE; comma/semicolon for multiple)
+    - phone       (optional)
+    - subjects    (optional; comma/semicolon separated subject codes)
+    - password    (optional; if blank, uses email local-part)
+    """
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    if not is_admin:
+        return Response({"detail": "Admin only."}, status=403)
+
+    upload = request.FILES.get('file')
+    if not upload:
+        return Response({"detail": "No file uploaded. Use form field 'file'."}, status=400)
+    if not str(upload.name).lower().endswith('.xlsx'):
+        return Response({"detail": "Invalid file type. Please upload an .xlsx file."}, status=400)
+
+    try:
+        if hasattr(upload, 'seek'):
+            upload.seek(0)
+        wb = load_workbook(filename=upload, data_only=True)
+    except Exception:
+        return Response({"detail": "Could not read Excel file. Make sure it is a valid .xlsx file."}, status=400)
+
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return Response({"detail": "Excel file is empty."}, status=400)
+
+    header_row = rows[0]
+    headers = [str(v).strip().lower() if v is not None else '' for v in header_row]
+    required_cols = ['full_name', 'email', 'department']
+    missing = [c for c in required_cols if c not in headers]
+    if missing:
+        return Response(
+            {
+                "detail": "Missing required columns in header row.",
+                "missing_columns": missing,
+                "expected_columns": required_cols + ['phone', 'subjects', 'password'],
+                "received_headers": headers,
+            },
+            status=400,
+        )
+
+    def _col(name: str) -> int | None:
+        return headers.index(name) if name in headers else None
+
+    idx_full = _col('full_name')
+    idx_email = _col('email')
+    idx_dept = _col('department')
+    idx_phone = _col('phone')
+    idx_subjects = _col('subjects')
+    idx_password = _col('password')
+
+    created_count = 0
+    skipped_existing = 0
+    skipped_invalid = 0
+    error_rows: list[dict] = []
+
+    all_subjects = list(Subject.objects.all().only('id', 'code', 'name'))
+
+    def _get(row, i):
+        if i is None or i >= len(row):
+            return ''
+        v = row[i]
+        return '' if v is None else str(v).strip()
+
+    for row_number, row in enumerate(rows[1:], start=2):
+        if row is None or all((cell is None or str(cell).strip() == '') for cell in row):
+            continue
+        full_name = _get(row, idx_full)
+        email = _get(row, idx_email)
+        dept_cell = _get(row, idx_dept)
+        phone = _get(row, idx_phone)
+        subjects_cell = _get(row, idx_subjects)
+        password_cell = _get(row, idx_password)
+
+        if not email or not dept_cell:
+            skipped_invalid += 1
+            error_rows.append({"row": row_number, "reason": "Missing email or department."})
+            continue
+
+        if User.objects.filter(email__iexact=email, role='faculty').exists():
+            skipped_existing += 1
+            continue
+
+        username_base = email.split('@')[0]
+        username = username_base
+        suffix = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{username_base}_{suffix}"
+            suffix += 1
+        raw_password = password_cell or username_base
+
+        # Departments: store as comma-separated codes (no validation, to keep flexible)
+        dept_value = ','.join(
+            [p.strip() for p in re.split(r'[;,]+', dept_cell) if p and str(p).strip()]
+        )
+
+        try:
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=raw_password,
+                role='faculty',
+                full_name=full_name or username,
+                phone=phone or '',
+                department=dept_value,
+            )
+            user.visible_password = raw_password
+            # subjects: codes -> ids
+            if subjects_cell:
+                tokens = [p.strip() for p in re.split(r'[;,]+', subjects_cell) if p and str(p).strip()]
+                ids: list[str] = []
+                for token in tokens:
+                    if not token:
+                        continue
+                    subj = next(
+                        (s for s in all_subjects if str(s.code or '').lower() == token.lower() or str(s.name or '').lower() == token.lower()),
+                        None,
+                    )
+                    if subj:
+                        ids.append(str(subj.id))
+                if ids:
+                    user.assigned_subject_ids = ','.join(sorted(set(ids)))
+            user.save(update_fields=['visible_password', 'assigned_subject_ids'])
+        except Exception as exc:
+            skipped_invalid += 1
+            error_rows.append({"row": row_number, "reason": f"Failed to create faculty: {exc.__class__.__name__}"})
+            continue
+
+        created_count += 1
+
+    return Response(
+        {
+            "created": created_count,
+            "skipped_existing": skipped_existing,
+            "skipped_invalid": skipped_invalid,
+            "total_processed_rows": len(rows) - 1,
+            "errors": error_rows,
+            "note": "New faculty accounts use the password column (or email prefix if blank).",
+        }
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def bulk_subject_upload_view(request):
+    """Admin: bulk create/update subjects from Excel (.xlsx).
+
+    Expected columns (case-insensitive):
+    - code
+    - name
+    - department_codes   (comma/semicolon separated department codes)
+    - year
+    - semester
+    """
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    if not is_admin:
+        return Response({"detail": "Admin only."}, status=403)
+
+    upload = request.FILES.get('file')
+    if not upload:
+        return Response({"detail": "No file uploaded. Use form field 'file'."}, status=400)
+    if not str(upload.name).lower().endswith('.xlsx'):
+        return Response({"detail": "Invalid file type. Please upload an .xlsx file."}, status=400)
+
+    try:
+        if hasattr(upload, 'seek'):
+            upload.seek(0)
+        wb = load_workbook(filename=upload, data_only=True)
+    except Exception:
+        return Response({"detail": "Could not read Excel file. Make sure it is a valid .xlsx file."}, status=400)
+
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return Response({"detail": "Excel file is empty."}, status=400)
+
+    header_row = rows[0]
+    headers = [str(v).strip().lower() if v is not None else '' for v in header_row]
+    required_cols = ['code', 'name', 'department_codes']
+    missing = [c for c in required_cols if c not in headers]
+    if missing:
+        return Response(
+            {
+                "detail": "Missing required columns in header row.",
+                "missing_columns": missing,
+                "expected_columns": required_cols + ['year', 'semester'],
+                "received_headers": headers,
+            },
+            status=400,
+        )
+
+    idx_code = headers.index('code')
+    idx_name = headers.index('name')
+    idx_dept_codes = headers.index('department_codes')
+    idx_year = headers.index('year') if 'year' in headers else None
+    idx_semester = headers.index('semester') if 'semester' in headers else None
+
+    created = 0
+    updated = 0
+    skipped_invalid = 0
+    error_rows: list[dict] = []
+
+    dept_by_code = {d.code: d for d in Department.objects.all()}
+
+    def _cell(row, i):
+        if i is None or i >= len(row):
+            return ''
+        v = row[i]
+        return '' if v is None else str(v).strip()
+
+    for row_number, row in enumerate(rows[1:], start=2):
+        if row is None or all((cell is None or str(cell).strip() == '') for cell in row):
+            continue
+        code = _cell(row, idx_code)
+        name = _cell(row, idx_name)
+        dept_codes_raw = _cell(row, idx_dept_codes)
+        year = _cell(row, idx_year) or '1'
+        semester = _cell(row, idx_semester) or '1'
+
+        if not code or not name or not dept_codes_raw:
+            skipped_invalid += 1
+            error_rows.append({"row": row_number, "reason": "Missing code, name, or department_codes."})
+            continue
+
+        tokens = [p.strip() for p in re.split(r'[;,]+', dept_codes_raw) if p and str(p).strip()]
+        dept_ids: list[int] = []
+        for token in tokens:
+            d = dept_by_code.get(token)
+            if not d:
+                # ignore unknown department codes but log once per row
+                continue
+            dept_ids.append(d.id)
+        if not dept_ids:
+            skipped_invalid += 1
+            error_rows.append({"row": row_number, "reason": "No valid department_codes found for this row."})
+            continue
+
+        subj, created_flag = Subject.objects.get_or_create(
+            code=code,
+            year=str(year),
+            semester=str(semester),
+            defaults={"name": name},
+        )
+        if created_flag:
+            created += 1
+        else:
+            if subj.name != name:
+                subj.name = name
+                subj.save(update_fields=['name'])
+            updated += 1
+        subj.departments.set(dept_ids)
+
+    return Response(
+        {
+            "created": created,
+            "updated": updated,
+            "skipped_invalid": skipped_invalid,
+            "total_processed_rows": len(rows) - 1,
+            "errors": error_rows,
+        }
+    )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def export_attendance_excel_view(request):
@@ -1345,6 +1617,83 @@ def sample_student_registration_excel_view(request):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
     response['Content-Disposition'] = 'attachment; filename="sample_student_registration.xlsx"'
+    wb.save(response)
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sample_faculty_registration_excel_view(request):
+    """Admin: downloadable .xlsx for faculty bulk upload."""
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    if not is_admin:
+        return Response({"detail": "Admin only."}, status=403)
+
+    dept_code = (
+        Department.objects.order_by('code').values_list('code', flat=True).first() or 'CSE'
+    )
+    sample_subject = (
+        Subject.objects.order_by('year', 'semester', 'code').values_list('code', flat=True).first()
+        or 'SUB101'
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Faculty'
+    ws.append(['full_name', 'email', 'department', 'phone', 'subjects', 'password'])
+    ws.append(['Dr. Alice Example', 'alice@example.com', dept_code, '9876543210', sample_subject, 'alice@123'])
+    ws.append(['Dr. Bob Example', 'bob@example.com', dept_code, '9876500000', f'{sample_subject}; OTHER101', ''])
+
+    ins = wb.create_sheet('Instructions')
+    ins.append(['Template for Admin → Manage Faculty → Bulk import from Excel (.xlsx).'])
+    ins.append([])
+    ins.append(['Row 1 must be the header with these exact column names (case-insensitive):'])
+    ins.append(['full_name, email, department, phone, subjects, password'])
+    ins.append([])
+    ins.append(['department: branch code as in Admin → Branches (sample uses: ' + dept_code + ').'])
+    ins.append(['subjects: comma/semicolon separated subject codes (e.g. ' + sample_subject + ').'])
+    ins.append(['password: if left blank, initial password defaults to the email local-part.'])
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = 'attachment; filename="sample_faculty_registration.xlsx"'
+    wb.save(response)
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sample_subjects_excel_view(request):
+    """Admin: downloadable .xlsx for subject bulk upload."""
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    if not is_admin:
+        return Response({"detail": "Admin only."}, status=403)
+
+    dept_codes = list(Department.objects.order_by('code').values_list('code', flat=True)[:2])
+    primary = dept_codes[0] if dept_codes else 'CSE'
+    both = '; '.join(dept_codes) if dept_codes else 'CSE; ECE'
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Subjects'
+    ws.append(['code', 'name', 'department_codes', 'year', 'semester'])
+    ws.append(['CSE101', 'Programming I', primary, '1', '1'])
+    ws.append(['CSE201', 'Data Structures', both, '2', '1'])
+
+    ins = wb.create_sheet('Instructions')
+    ins.append(['Template for Admin → Subjects → Bulk import from Excel (.xlsx).'])
+    ins.append([])
+    ins.append(['Row 1 must be the header with these column names (case-insensitive):'])
+    ins.append(['code, name, department_codes, year, semester'])
+    ins.append([])
+    ins.append(['department_codes: comma/semicolon separated branch codes (e.g. "CSE; ECE").'])
+    ins.append(['year and semester are stored as strings (e.g. "1", "2").'])
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = 'attachment; filename="sample_subjects.xlsx"'
     wb.save(response)
     return response
 
