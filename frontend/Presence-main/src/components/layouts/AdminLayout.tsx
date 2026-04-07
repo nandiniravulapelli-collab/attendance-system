@@ -91,6 +91,8 @@ function computeAdminDefaultersList(
 
 export const AdminLayout: React.FC = () => {
   const { user, logout, updateSessionUser } = useAuth();
+  const todayForAttendance = new Date();
+  todayForAttendance.setHours(0, 0, 0, 0);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isImporting, setIsImporting] = useState(false);
   const [isDownloadingDateWise, setIsDownloadingDateWise] = useState(false);
@@ -3413,7 +3415,13 @@ export const AdminLayout: React.FC = () => {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={attDate} onSelect={(d) => d && setAttDate(d)} className="p-3 pointer-events-auto" />
+                        <Calendar
+                          mode="single"
+                          selected={attDate}
+                          onSelect={(d) => d && setAttDate(d)}
+                          disabled={(d) => d > todayForAttendance}
+                          className="p-3 pointer-events-auto"
+                        />
                       </PopoverContent>
                     </Popover>
                   </div>

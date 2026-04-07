@@ -65,6 +65,8 @@ const SAT_YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
 
 export const FacultyLayout: React.FC = () => {
   const { user, logout, updateSessionUser } = useAuth();
+  const todayForAttendance = new Date();
+  todayForAttendance.setHours(0, 0, 0, 0);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedBranches, setSelectedBranches] = useState<string[]>(['__all__']);
@@ -1107,6 +1109,7 @@ export const FacultyLayout: React.FC = () => {
                           mode="single"
                           selected={selectedDate}
                           onSelect={(date) => date && setSelectedDate(date)}
+                          disabled={(date) => date > todayForAttendance}
                           initialFocus
                           className="p-3 pointer-events-auto"
                         />
