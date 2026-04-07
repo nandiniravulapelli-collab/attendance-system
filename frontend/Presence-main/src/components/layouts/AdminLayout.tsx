@@ -71,20 +71,27 @@ type AdminDefaulterStudent = {
 
 function computeAdminDefaultersList(
   list: AdminDefaulterStudent[],
-  records: Array<{ student: number; status: string }>,
+  records: Array<{ student: number; status: string; hours?: number | null; total_hours?: number | null }>,
 ): Array<AdminDefaulterStudent & { attendancePercentage: number; presentClasses: number; totalClasses: number }> {
-  const byStudent: Record<number, { present: number; total: number }> = {};
+  const byStudent: Record<number, { attended: number; total: number }> = {};
   records.forEach((r) => {
     const id = r.student;
-    if (!byStudent[id]) byStudent[id] = { present: 0, total: 0 };
-    byStudent[id].total++;
-    if (String(r.status).toLowerCase() === 'present') byStudent[id].present++;
+    if (!byStudent[id]) byStudent[id] = { attended: 0, total: 0 };
+    const totalH = r.total_hours != null && Number(r.total_hours) > 0 ? Number(r.total_hours) : 1;
+    const attendedH = r.hours != null ? Number(r.hours) : (String(r.status).toLowerCase() === 'present' ? totalH : 0);
+    byStudent[id].total += totalH;
+    byStudent[id].attended += Math.max(0, Math.min(totalH, attendedH));
   });
   return list
     .map((s) => {
-      const stat = byStudent[s.id] || { present: 0, total: 0 };
-      const pct = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
-      return { ...s, attendancePercentage: Math.round(pct * 100) / 100, presentClasses: stat.present, totalClasses: stat.total };
+      const stat = byStudent[s.id] || { attended: 0, total: 0 };
+      const pct = stat.total > 0 ? (stat.attended / stat.total) * 100 : 0;
+      return {
+        ...s,
+        attendancePercentage: Math.round(pct * 100) / 100,
+        presentClasses: Math.round(stat.attended * 100) / 100,
+        totalClasses: Math.round(stat.total * 100) / 100,
+      };
     })
     .filter((s) => s.attendancePercentage < 85);
 }
@@ -872,16 +879,18 @@ export const AdminLayout: React.FC = () => {
     Promise.all([
       fetch(apiUrl('/api/users/?role=student'), { credentials: 'include' }).then(r => r.ok ? r.json() : []),
       fetch(apiUrl('/api/attendance/'), { credentials: 'include' }).then(r => r.ok ? r.json() : { records: [] })
-    ]).then(([studentsList, attData]: [Array<{ id: number; full_name?: string | null; roll_number?: string | null; username?: string; department?: string | null; year?: string | null; section?: string | null; sections?: string[] }>, { records?: Array<{ student: number; status: string; date?: string }> }]) => {
+    ]).then(([studentsList, attData]: [Array<{ id: number; full_name?: string | null; roll_number?: string | null; username?: string; department?: string | null; year?: string | null; section?: string | null; sections?: string[] }>, { records?: Array<{ student: number; status: string; date?: string; hours?: number | null; total_hours?: number | null }> }]) => {
       const list = Array.isArray(studentsList) ? studentsList : [];
       setBackendStudentCount(list.length);
       const records = Array.isArray(attData?.records) ? attData.records : [];
       const byStudent: Record<number, { present: number; total: number }> = {};
-      records.forEach((r: { student: number; status: string }) => {
+      records.forEach((r: { student: number; status: string; hours?: number | null; total_hours?: number | null }) => {
         const id = r.student;
         if (!byStudent[id]) byStudent[id] = { present: 0, total: 0 };
-        byStudent[id].total++;
-        if (String(r.status).toLowerCase() === 'present') byStudent[id].present++;
+        const th = r.total_hours != null && Number(r.total_hours) > 0 ? Number(r.total_hours) : 1;
+        const ah = r.hours != null ? Number(r.hours) : (String(r.status).toLowerCase() === 'present' ? th : 0);
+        byStudent[id].total += th;
+        byStudent[id].present += Math.max(0, Math.min(th, ah));
       });
       const defaultersList = computeAdminDefaultersList(list, records);
       setBackendDefaulters(defaultersList);
@@ -1309,6 +1318,32 @@ export const AdminLayout: React.FC = () => {
       return true;
     });
   }, [attRecords, attStudentIdToInfo, attRecordFilterYears, attRecordFilterBranches, attRecordFilterSections, attRecordFilterSubjects]);
+
+  const attendanceRecordsMetrics = useMemo(() => {
+    let attendedClasses = 0;
+    let totalClasses = 0;
+    const byDate: Record<string, { attended: number; total: number }> = {};
+    filteredAttRecords.forEach((r) => {
+      const th = r.total_hours != null && Number(r.total_hours) > 0 ? Number(r.total_hours) : 1;
+      const ah = r.hours != null ? Number(r.hours) : (String(r.status).toLowerCase() === 'present' ? th : 0);
+      const dateKey = String(r.date || '').slice(0, 10);
+      attendedClasses += Math.max(0, Math.min(th, ah));
+      totalClasses += th;
+      if (dateKey) {
+        if (!byDate[dateKey]) byDate[dateKey] = { attended: 0, total: 0 };
+        byDate[dateKey].attended += Math.max(0, Math.min(th, ah));
+        byDate[dateKey].total += th;
+      }
+    });
+    const totalDays = Object.keys(byDate).length;
+    const attendedDays = Object.values(byDate).filter((d) => d.attended > 0 && d.total > 0).length;
+    return {
+      attendedClasses: Math.round(attendedClasses * 100) / 100,
+      totalClasses: Math.round(totalClasses * 100) / 100,
+      attendedDays,
+      totalDays,
+    };
+  }, [filteredAttRecords]);
 
   const attRecordsForTable = useMemo(() => {
     const q = attRecordsSearchQuery.trim().toLowerCase();
@@ -4184,6 +4219,12 @@ export const AdminLayout: React.FC = () => {
                     <p className="text-xs text-muted-foreground">
                       Matching rows: <span className="font-medium text-foreground">{filteredAttRecords.length}</span>
                       {attRecords.length !== filteredAttRecords.length ? ` of ${attRecords.length} loaded` : ''}.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Classes: <span className="font-medium text-foreground">{attendanceRecordsMetrics.attendedClasses}</span> /{' '}
+                      <span className="font-medium text-foreground">{attendanceRecordsMetrics.totalClasses}</span> (1 hour = 1 class) · Days:{' '}
+                      <span className="font-medium text-foreground">{attendanceRecordsMetrics.attendedDays}</span> /{' '}
+                      <span className="font-medium text-foreground">{attendanceRecordsMetrics.totalDays}</span> (all hours on a date = 1 day)
                     </p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
