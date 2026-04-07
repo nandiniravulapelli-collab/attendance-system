@@ -219,6 +219,7 @@ export const StudentLayout: React.FC = () => {
   const [fromDate, setFromDate] = useState<Date | null>(null);
   const [toDate, setToDate] = useState<Date | null>(null);
   const [showAllAttendanceOnDashboard, setShowAllAttendanceOnDashboard] = useState(false);
+  const [dashboardSubjectFilters, setDashboardSubjectFilters] = useState<string[]>([]);
   const [isStudentAttendanceFrozen, setIsStudentAttendanceFrozen] = useState(false);
   useEffect(() => {
     fetch(apiUrl('/api/attendance-portal-freeze/'), { credentials: 'include' })
@@ -358,10 +359,17 @@ export const StudentLayout: React.FC = () => {
         .sort((a, b) => (b.date > a.date ? 1 : -1))
         .map(r => ({ subject: r.subject, date: r.date, status: r.status?.toLowerCase() || 'absent' }))
     : db.getRecentAttendance(user?.id || '');
+  const dashboardSubjectOptions = Array.from(
+    new Set(completeAttendance.map((r) => String(r.subject || '').trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b));
+  const completeAttendanceFilteredBySubject =
+    dashboardSubjectFilters.length > 0
+      ? completeAttendance.filter((r) => dashboardSubjectFilters.includes(String(r.subject || '').trim()))
+      : completeAttendance;
   const hasDateFilter = !!fromDate || !!toDate;
   const attendanceToShowOnDashboard = hasDateFilter || showAllAttendanceOnDashboard
-    ? completeAttendance
-    : completeAttendance.slice(0, 10);
+    ? completeAttendanceFilteredBySubject
+    : completeAttendanceFilteredBySubject.slice(0, 10);
 
   return (
     <div className="min-h-screen bg-dashboard-bg">
@@ -620,6 +628,49 @@ export const StudentLayout: React.FC = () => {
               <CardContent>
                 <div className="flex flex-wrap gap-4 items-end mb-4">
                   <div className="space-y-1">
+                    <Label>Subjects</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-56 justify-start text-left font-normal">
+                          {dashboardSubjectFilters.length > 0
+                            ? `${dashboardSubjectFilters.length} selected`
+                            : 'All subjects'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3 max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">Quick actions</span>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setDashboardSubjectFilters(dashboardSubjectOptions)}>Select all</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setDashboardSubjectFilters([])}>Clear</Button>
+                          </div>
+                        </div>
+                        {dashboardSubjectOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No subjects in current attendance.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {dashboardSubjectOptions.map((subject, idx) => (
+                              <div key={subject} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`stu-dash-sub-${idx}`}
+                                  checked={dashboardSubjectFilters.includes(subject)}
+                                  onCheckedChange={(checked) =>
+                                    setDashboardSubjectFilters(
+                                      checked
+                                        ? [...dashboardSubjectFilters, subject]
+                                        : dashboardSubjectFilters.filter((v) => v !== subject),
+                                    )
+                                  }
+                                />
+                                <label htmlFor={`stu-dash-sub-${idx}`} className="text-sm cursor-pointer">{subject}</label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1">
                     <Label>From date</Label>
                     <Input
                       type="date"
@@ -663,27 +714,31 @@ export const StudentLayout: React.FC = () => {
                   </Button>
                 </div>
                 <div className="space-y-3">
-                  {attendanceToShowOnDashboard.map((record, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-2 h-2 rounded-full bg-primary" />
-                        <div>
-                          <p className="font-medium">{record.subject}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {format(parseISO(record.date), 'PPP')}
-                          </p>
+                  {attendanceToShowOnDashboard.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No attendance records match the selected subject/date filters.</p>
+                  ) : (
+                    attendanceToShowOnDashboard.map((record, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                          <div>
+                            <p className="font-medium">{record.subject}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {format(parseISO(record.date), 'PPP')}
+                            </p>
+                          </div>
                         </div>
+                        <Badge variant={record.status === 'present' ? 'default' : 'destructive'}>
+                          {record.status === 'present' ? (
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                          ) : (
+                            <XCircle className="w-3 h-3 mr-1" />
+                          )}
+                          {record.status.toUpperCase()}
+                        </Badge>
                       </div>
-                      <Badge variant={record.status === 'present' ? 'default' : 'destructive'}>
-                        {record.status === 'present' ? (
-                          <CheckCircle className="w-3 h-3 mr-1" />
-                        ) : (
-                          <XCircle className="w-3 h-3 mr-1" />
-                        )}
-                        {record.status.toUpperCase()}
-                      </Badge>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
