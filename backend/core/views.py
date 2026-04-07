@@ -286,6 +286,19 @@ def attendance_view(request):
                     defaults["total_hours"] = 1
                 if defaults.get("total_hours") is not None and defaults.get("hours") is None:
                     defaults["hours"] = 1 if status_normalized == 'present' else 0
+                existing_qs = Attendance.objects.filter(
+                    student_id=student_id,
+                    subject=str(subject).strip(),
+                    date=date_obj,
+                )
+                if request.user.role == 'faculty' and existing_qs.exists():
+                    errors.append({
+                        "index": i,
+                        "errors": {
+                            "detail": "Attendance already saved for this student/subject/date. Only admin can modify it."
+                        },
+                    })
+                    continue
                 _, created = Attendance.objects.update_or_create(
                     student_id=student_id,
                     subject=str(subject).strip(),
@@ -298,6 +311,37 @@ def attendance_view(request):
                 "records": [],  # frontend refetches via GET
                 "errors": errors if errors else None,
             }, status=201 if saved_count > 0 else (400 if errors else 201))
+
+        try:
+            single_student_id = int(data.get('student'))
+        except (TypeError, ValueError, AttributeError):
+            single_student_id = None
+        single_subject = str((data or {}).get('subject') or '').strip() if isinstance(data, dict) else ''
+        single_date = None
+        if isinstance(data, dict):
+            _raw_date = data.get('date')
+            try:
+                if isinstance(_raw_date, datetime.datetime):
+                    single_date = _raw_date.date()
+                elif isinstance(_raw_date, datetime.date):
+                    single_date = _raw_date
+                elif _raw_date is not None:
+                    single_date = datetime.date.fromisoformat(str(_raw_date).strip())
+            except (TypeError, ValueError):
+                single_date = None
+        if (
+            request.user.role == 'faculty'
+            and single_student_id is not None
+            and single_subject
+            and single_date is not None
+            and Attendance.objects.filter(
+                student_id=single_student_id, subject=single_subject, date=single_date
+            ).exists()
+        ):
+            return Response(
+                {"detail": "Attendance already saved for this student/subject/date. Only admin can modify it."},
+                status=403,
+            )
 
         serializer = AttendanceSerializer(data=data)
         if serializer.is_valid():
@@ -1294,6 +1338,7 @@ def bulk_attendance_upload_view(request):
     """
     if request.user.role not in ['admin', 'faculty'] and not request.user.is_superuser:
         return Response({"detail": "Only admin or faculty can upload attendance."}, status=403)
+    is_faculty = request.user.role == 'faculty' and not request.user.is_superuser
     ctrl = _get_attendance_portal_control()
     if request.user.role == 'faculty' and ctrl.freeze_faculty_portal and not request.user.is_superuser:
         return Response({"detail": "Attendance portal is currently frozen for faculty."}, status=423)
@@ -1553,6 +1598,13 @@ def bulk_attendance_upload_view(request):
             if created:
                 created_count += 1
             else:
+                if is_faculty:
+                    skipped_existing += 1
+                    error_rows.append({
+                        "row": row_number,
+                        "reason": "Attendance already exists for this student/subject/date. Only admin can modify it.",
+                    })
+                    continue
                 same_status = (att_obj.status or '') == defaults["status"]
                 existing_hours = float(att_obj.hours) if att_obj.hours is not None else None
                 existing_total_hours = float(att_obj.total_hours) if att_obj.total_hours is not None else None
