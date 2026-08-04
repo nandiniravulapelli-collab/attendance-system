@@ -355,11 +355,25 @@ export const FacultyLayout: React.FC = () => {
       .catch(() => setAttendanceRecords([]));
   }, [user?.role, activeTab, isFacultyAttendanceFrozen]);
 
-  const studentsInSection = apiStudents
-    .filter(s => !s.is_detained)
-    .map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, departmentId: s.department || '', section: s.section || '', year: s.year ? Number(s.year) : 0 }))
-    .filter(s => (selectedBranchCodes.length === 0 || selectedBranchCodes.includes(s.departmentId)))
-    .filter(s => studentMatchesAnySection(s, selectedSections));
+  const studentsInSection = useMemo(() => {
+    const facultyDeptSections = user?.faculty_department_sections || [];
+    
+    return apiStudents
+      .filter(s => !s.is_detained)
+      .map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, departmentId: s.department || '', section: s.section || '', year: s.year ? Number(s.year) : 0 }))
+      .filter(s => (selectedBranchCodes.length === 0 || selectedBranchCodes.includes(s.departmentId)))
+      .filter(s => studentMatchesAnySection(s, selectedSections))
+      .filter(s => {
+        // If faculty has specific section assignments, filter by those
+        if (facultyDeptSections.length > 0) {
+          const studentSections = s.sections || (s.section ? [s.section] : []);
+          return facultyDeptSections.some((fds: { department_code: string; section_name: string }) => {
+            return fds.department_code === s.departmentId && studentSections.includes(fds.section_name);
+          });
+        }
+        return true;
+      });
+  }, [apiStudents, selectedBranchCodes.join(','), selectedSections.join(','), user?.faculty_department_sections]);
 
   // Pre-fill attendance checkboxes when one subject is selected.
   const selectedSubjectObjs = subjects.filter(s => selectedSubjects.includes(String(s.id)));
@@ -677,11 +691,29 @@ export const FacultyLayout: React.FC = () => {
     }
   };
 
-  /** Students and attendance rows scoped to this faculty's branch(es) — used for dashboard analytics */
+  /** Students and attendance rows scoped to this faculty's branch(es) and sections — used for dashboard analytics */
   const facultyScopedStudents = useMemo(() => {
     if (facultyDeptCodes.length === 0) return apiStudents;
-    return apiStudents.filter((s) => facultyDeptCodes.includes(s.department ?? ''));
-  }, [apiStudents, facultyDeptCodes.join(',')]);
+    
+    // Get faculty's assigned sections
+    const facultyDeptSections = user?.faculty_department_sections || [];
+    
+    return apiStudents.filter((s) => {
+      // First check if student is in faculty's departments
+      if (!facultyDeptCodes.includes(s.department ?? '')) return false;
+      
+      // If faculty has specific section assignments, filter by sections
+      if (facultyDeptSections.length > 0) {
+        const studentSections = s.sections || (s.section ? [s.section] : []);
+        return facultyDeptSections.some((fds: { department_code: string; section_name: string }) => {
+          return fds.department_code === s.department && studentSections.includes(fds.section_name);
+        });
+      }
+      
+      // If no specific section assignments, include all students in the department
+      return true;
+    });
+  }, [apiStudents, facultyDeptCodes.join(','), user?.faculty_department_sections]);
 
   const facultyScopedStudentIds = useMemo(
     () => new Set(facultyScopedStudents.map((s) => s.id)),
@@ -843,7 +875,7 @@ export const FacultyLayout: React.FC = () => {
 
   // Load defaulters data for faculty dashboard
   useEffect(() => {
-    if (activeTab !== 'dashboard' || facultyDeptCodes.length === 0) return;
+    if ((activeTab !== 'dashboard' && activeTab !== 'defaulters') || facultyDeptCodes.length === 0) return;
     
     const loadDefaulters = async () => {
       try {
@@ -987,6 +1019,7 @@ export const FacultyLayout: React.FC = () => {
             <TabsTrigger value="student-attendance" disabled={isFacultyAttendanceFrozen}>Student Attendance</TabsTrigger>
             <TabsTrigger value="reports" disabled={isFacultyAttendanceFrozen}>My Reports</TabsTrigger>
             <TabsTrigger value="subjects">My Subjects</TabsTrigger>
+            <TabsTrigger value="defaulters">Defaulters</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
@@ -1042,121 +1075,7 @@ export const FacultyLayout: React.FC = () => {
                   </p>
                 </CardContent>
               </Card>
-
-              <Card className="overflow-hidden transition-all duration-300 hover:shadow-card-hover border-amber-200/50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Defaulters</CardTitle>
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
-                    <AlertTriangle className="h-5 w-5 text-amber-600" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-amber-600">{facultyDefaulters.length}</div>
-                  <p className="text-xs text-muted-foreground">Your students below 85%</p>
-                </CardContent>
-              </Card>
             </div>
-
-            {/* Defaulters Table */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Defaulters List</CardTitle>
-                <CardDescription>Students with attendance below 85% in your assigned sections</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Filters */}
-                  <div className="flex flex-wrap gap-2">
-                    <Input
-                      placeholder="Search by name, roll number..."
-                      value={defaultersSearchQuery}
-                      onChange={(e) => setDefaultersSearchQuery(e.target.value)}
-                      className="max-w-xs"
-                    />
-                    <Select value={defaulterMinPct} onValueChange={setDefaulterMinPct}>
-                      <SelectTrigger className="w-[120px]">
-                        <SelectValue placeholder="Min %" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">0%</SelectItem>
-                        <SelectItem value="50">50%</SelectItem>
-                        <SelectItem value="60">60%</SelectItem>
-                        <SelectItem value="70">70%</SelectItem>
-                        <SelectItem value="75">75%</SelectItem>
-                        <SelectItem value="80">80%</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={defaulterMaxPct} onValueChange={setDefaulterMaxPct}>
-                      <SelectTrigger className="w-[120px]">
-                        <SelectValue placeholder="Max %" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="70">70%</SelectItem>
-                        <SelectItem value="75">75%</SelectItem>
-                        <SelectItem value="80">80%</SelectItem>
-                        <SelectItem value="85">85%</SelectItem>
-                        <SelectItem value="90">90%</SelectItem>
-                        <SelectItem value="100">100%</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Defaulters Table */}
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-muted">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Roll Number</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Department</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Section</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Attendance %</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {facultyDefaulters.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                              No defaulters found in your assigned sections
-                            </td>
-                          </tr>
-                        ) : (
-                          facultyDefaulters
-                            .filter((s) => {
-                              const q = defaultersSearchQuery.trim().toLowerCase();
-                              if (q) {
-                                const name = (s.full_name || '').toLowerCase();
-                                const roll = (s.roll_number || '').toLowerCase();
-                                const user = (s.username || '').toLowerCase();
-                                if (!name.includes(q) && !roll.includes(q) && !user.includes(q)) return false;
-                              }
-                              const minPct = Number(defaulterMinPct);
-                              const maxPct = Number(defaulterMaxPct);
-                              if (s.attendancePercentage < minPct || s.attendancePercentage > maxPct) return false;
-                              return true;
-                            })
-                            .map((defaulter) => (
-                              <tr key={defaulter.id} className="border-t hover:bg-muted/50">
-                                <td className="px-4 py-2 text-sm">{defaulter.full_name || '-'}</td>
-                                <td className="px-4 py-2 text-sm">{defaulter.roll_number || '-'}</td>
-                                <td className="px-4 py-2 text-sm">{defaulter.department || '-'}</td>
-                                <td className="px-4 py-2 text-sm">{defaulter.section || '-'}</td>
-                                <td className="px-4 py-2 text-sm">{defaulter.year || '-'}</td>
-                                <td className="px-4 py-2 text-sm">
-                                  <Badge variant={defaulter.attendancePercentage < 75 ? 'destructive' : 'secondary'}>
-                                    {defaulter.attendancePercentage.toFixed(1)}%
-                                  </Badge>
-                                </td>
-                              </tr>
-                            ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
             <div className="flex flex-wrap gap-2">
               <Button className="rounded-xl" onClick={() => setActiveTab('attendance')}>
@@ -2043,6 +1962,109 @@ export const FacultyLayout: React.FC = () => {
                       </div>
                     ))
                   )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Defaulters */}
+          <TabsContent value="defaulters" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Defaulters List</CardTitle>
+                <CardDescription>Students with attendance below 85% in your assigned sections</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Filters */}
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      placeholder="Search by name, roll number..."
+                      value={defaultersSearchQuery}
+                      onChange={(e) => setDefaultersSearchQuery(e.target.value)}
+                      className="max-w-xs"
+                    />
+                    <Select value={defaulterMinPct} onValueChange={setDefaulterMinPct}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Min %" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">0%</SelectItem>
+                        <SelectItem value="50">50%</SelectItem>
+                        <SelectItem value="60">60%</SelectItem>
+                        <SelectItem value="70">70%</SelectItem>
+                        <SelectItem value="75">75%</SelectItem>
+                        <SelectItem value="80">80%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={defaulterMaxPct} onValueChange={setDefaulterMaxPct}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Max %" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="70">70%</SelectItem>
+                        <SelectItem value="75">75%</SelectItem>
+                        <SelectItem value="80">80%</SelectItem>
+                        <SelectItem value="85">85%</SelectItem>
+                        <SelectItem value="90">90%</SelectItem>
+                        <SelectItem value="100">100%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Defaulters Table */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Roll Number</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Department</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Section</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Attendance %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {facultyDefaulters.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                              No defaulters found in your assigned sections
+                            </td>
+                          </tr>
+                        ) : (
+                          facultyDefaulters
+                            .filter((s) => {
+                              const q = defaultersSearchQuery.trim().toLowerCase();
+                              if (q) {
+                                const name = (s.full_name || '').toLowerCase();
+                                const roll = (s.roll_number || '').toLowerCase();
+                                const user = (s.username || '').toLowerCase();
+                                if (!name.includes(q) && !roll.includes(q) && !user.includes(q)) return false;
+                              }
+                              const minPct = Number(defaulterMinPct);
+                              const maxPct = Number(defaulterMaxPct);
+                              if (s.attendancePercentage < minPct || s.attendancePercentage > maxPct) return false;
+                              return true;
+                            })
+                            .map((defaulter) => (
+                              <tr key={defaulter.id} className="border-t hover:bg-muted/50">
+                                <td className="px-4 py-2 text-sm">{defaulter.full_name || '-'}</td>
+                                <td className="px-4 py-2 text-sm">{defaulter.roll_number || '-'}</td>
+                                <td className="px-4 py-2 text-sm">{defaulter.department || '-'}</td>
+                                <td className="px-4 py-2 text-sm">{defaulter.section || '-'}</td>
+                                <td className="px-4 py-2 text-sm">{defaulter.year || '-'}</td>
+                                <td className="px-4 py-2 text-sm">
+                                  <Badge variant={defaulter.attendancePercentage < 75 ? 'destructive' : 'secondary'}>
+                                    {defaulter.attendancePercentage.toFixed(1)}%
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </CardContent>
             </Card>

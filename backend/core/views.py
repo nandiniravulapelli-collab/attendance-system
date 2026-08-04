@@ -470,8 +470,36 @@ def user_list_view(request):
         qs = qs.filter(is_detained=False)
         dept_str = (request.user.department or '').strip()
         dept_list = [x.strip() for x in dept_str.split(',') if x.strip()]
+        
+        # Get faculty's assigned sections
+        faculty_dept_sections = FacultyDepartmentSection.objects.filter(faculty=request.user).select_related('department', 'section')
+        faculty_sections_by_dept = {}
+        for fds in faculty_dept_sections:
+            dept_code = fds.department.code
+            if dept_code not in faculty_sections_by_dept:
+                faculty_sections_by_dept[dept_code] = []
+            faculty_sections_by_dept[dept_code].append(fds.section.name)
+        
         if dept_list:
             qs = qs.filter(department__in=dept_list)
+            
+            # If faculty has specific section assignments, filter by those
+            if faculty_sections_by_dept:
+                # Build Q objects for each department-section combination
+                section_filters = []
+                for dept_code, sections in faculty_sections_by_dept.items():
+                    for section_name in sections:
+                        section_filters.append(
+                            Q(department=dept_code) & _q_user_section_token(section_name)
+                        )
+                
+                if section_filters:
+                    # Combine all section filters with OR
+                    combined_filter = section_filters[0]
+                    for filter_q in section_filters[1:]:
+                        combined_filter |= filter_q
+                    qs = qs.filter(combined_filter)
+            
             department = request.query_params.get('department', '').strip()
             if department and department in dept_list:
                 qs = qs.filter(department=department)

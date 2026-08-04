@@ -1628,6 +1628,22 @@ export const AdminLayout: React.FC = () => {
         ? member.departments
         : (member.department ?? '').split(',').map((d: string) => d.trim()).filter(Boolean);
       const subjectIds = Array.isArray(member.subjects) ? member.subjects.map(String) : [];
+      
+      // Load existing department-section assignments
+      const facultyDeptSections = Array.isArray(member.faculty_department_sections) 
+        ? member.faculty_department_sections 
+        : [];
+      
+      const departmentSections = depts.map((deptCode: string) => {
+        const sectionsForDept = facultyDeptSections
+          .filter((fds: { department_code: string; section_name: string }) => fds.department_code === deptCode)
+          .map((fds: { department_code: string; section_name: string }) => fds.section_name);
+        return {
+          departmentCode: deptCode,
+          sectionNames: sectionsForDept
+        };
+      });
+      
       setSelectedFaculty(facultyId);
       setFacultyFormData({
         name: member.full_name ?? member.username,
@@ -1636,10 +1652,7 @@ export const AdminLayout: React.FC = () => {
         departmentIds: depts,
         phone: member.phone ?? '',
         subjects: subjectIds,
-        departmentSections: depts.map((deptCode: string) => ({
-          departmentCode: deptCode,
-          sectionNames: []
-        }))
+        departmentSections
       });
       setIsFacultyDialogOpen(true);
     }
@@ -3199,6 +3212,7 @@ export const AdminLayout: React.FC = () => {
                             <th className="text-left p-3">Name</th>
                             <th className="text-left p-3">Email</th>
                             <th className="text-left p-3">Departments</th>
+                            <th className="text-left p-3">Sections</th>
                             <th className="text-left p-3">Password</th>
                             <th className="text-left p-3">Subjects</th>
                             <th className="text-left p-3">Contact</th>
@@ -3216,6 +3230,27 @@ export const AdminLayout: React.FC = () => {
                                     ? member.departments
                                     : (member.department ?? '').split(',').map((d: string) => d.trim()).filter(Boolean);
                                   return depts.length > 0 ? depts.join(', ') : 'N/A';
+                                })()}
+                              </td>
+                              <td className="p-3">
+                                {(() => {
+                                  const sections = Array.isArray(member.faculty_department_sections) 
+                                    ? member.faculty_department_sections 
+                                    : [];
+                                  if (sections.length === 0) return <span className="text-xs text-muted-foreground">All sections</span>;
+                                  
+                                  // Group sections by department
+                                  const byDept: Record<string, string[]> = {};
+                                  sections.forEach((fds: { department_code: string; section_name: string }) => {
+                                    if (!byDept[fds.department_code]) byDept[fds.department_code] = [];
+                                    byDept[fds.department_code].push(fds.section_name);
+                                  });
+                                  
+                                  return Object.entries(byDept).map(([dept, secs]) => (
+                                    <div key={dept} className="text-xs">
+                                      <span className="font-medium">{dept}:</span> {secs.join(', ')}
+                                    </div>
+                                  ));
                                 })()}
                               </td>
                               <td className="p-3 font-mono text-sm">{member.visible_password ?? '—'}</td>
