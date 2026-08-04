@@ -22,6 +22,7 @@ from .views import (
     sample_faculty_registration_excel_view,
     sample_subjects_excel_view,
     sample_bulk_attendance_excel_view,
+    faculty_department_sections_view,
 )
 
 urlpatterns = [
@@ -47,4 +48,5 @@ urlpatterns = [
     path('samples/faculty-registration/', sample_faculty_registration_excel_view),
     path('samples/subjects/', sample_subjects_excel_view),
     path('samples/bulk-attendance/', sample_bulk_attendance_excel_view),
+    path('faculty-department-sections/<int:user_id>/', faculty_department_sections_view),
 ]

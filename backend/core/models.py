@@ -91,3 +91,18 @@ class AttendancePortalControl(models.Model):
             f"faculty={self.freeze_faculty_portal}, "
             f"student={self.freeze_student_portal})"
         )
+
+
+class FacultyDepartmentSection(models.Model):
+    """Model to store faculty assignments to specific sections within departments."""
+    faculty = models.ForeignKey(User, on_delete=models.CASCADE, related_name='faculty_department_sections')
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='faculty_assignments')
+    section = models.ForeignKey(Section, on_delete=models.CASCADE, related_name='faculty_assignments')
+
+    class Meta:
+        unique_together = [['faculty', 'department', 'section']]
+        verbose_name = 'Faculty Department Section'
+        verbose_name_plural = 'Faculty Department Sections'
+
+    def __str__(self):
+        return f"{self.faculty.username} - {self.department.code} - {self.section.name}"

@@ -63,6 +63,44 @@ type ApiSubject = {
 
 const SAT_YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
 
+type FacultyDefaulterStudent = {
+  id: number;
+  full_name?: string | null;
+  roll_number?: string | null;
+  username?: string;
+  department?: string | null;
+  year?: string | null;
+  section?: string | null;
+  sections?: string[];
+};
+
+function computeFacultyDefaultersList(
+  list: FacultyDefaulterStudent[],
+  records: Array<{ student: number; status: string; hours?: number | null; total_hours?: number | null }>,
+): Array<FacultyDefaulterStudent & { attendancePercentage: number; presentClasses: number; totalClasses: number }> {
+  const byStudent: Record<number, { attended: number; total: number }> = {};
+  records.forEach((r) => {
+    const id = r.student;
+    if (!byStudent[id]) byStudent[id] = { attended: 0, total: 0 };
+    const totalH = r.total_hours != null && Number(r.total_hours) > 0 ? Number(r.total_hours) : 1;
+    const attendedH = r.hours != null ? Number(r.hours) : (String(r.status).toLowerCase() === 'present' ? totalH : 0);
+    byStudent[id].total += totalH;
+    byStudent[id].attended += Math.max(0, Math.min(totalH, attendedH));
+  });
+  return list
+    .map((s) => {
+      const stat = byStudent[s.id] || { attended: 0, total: 0 };
+      const pct = stat.total > 0 ? (stat.attended / stat.total) * 100 : 0;
+      return {
+        ...s,
+        attendancePercentage: Math.round(pct * 100) / 100,
+        presentClasses: Math.round(stat.attended * 100) / 100,
+        totalClasses: Math.round(stat.total * 100) / 100,
+      };
+    })
+    .filter((s) => s.attendancePercentage < 85);
+}
+
 export const FacultyLayout: React.FC = () => {
   const { user, logout, updateSessionUser } = useAuth();
   const todayForAttendance = new Date();
@@ -96,6 +134,26 @@ export const FacultyLayout: React.FC = () => {
   } | null>(null);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [profileEditForm, setProfileEditForm] = useState({ full_name: '', phone: '', username: '', email: '' });
+
+  /** Defaulters state for faculty dashboard */
+  const [facultyDefaulters, setFacultyDefaulters] = useState<Array<{
+    id: number;
+    full_name: string | null;
+    roll_number: string | null;
+    username?: string;
+    department: string | null;
+    year?: string | null;
+    section?: string | null;
+    sections?: string[];
+    attendancePercentage: number;
+    presentClasses: number;
+    totalClasses: number;
+  }>>([]);
+  const [defaultersSearchQuery, setDefaultersSearchQuery] = useState('');
+  const [defaulterFilterYears, setDefaulterFilterYears] = useState<string[]>([]);
+  const [defaulterFilterSections, setDefaulterFilterSections] = useState<string[]>([]);
+  const [defaulterMinPct, setDefaulterMinPct] = useState<string>('0');
+  const [defaulterMaxPct, setDefaulterMaxPct] = useState<string>('85');
 
   /** Assigned subject ids/codes from API — only these subjects appear for this faculty */
   const [facultyAssignedSubjectTokens, setFacultyAssignedSubjectTokens] = useState<string[]>([]);
@@ -663,12 +721,6 @@ export const FacultyLayout: React.FC = () => {
     const attendancePercentage =
       totalHours > 0 ? Math.round((attendedHours / totalHours) * 10000) / 100 : 0;
 
-    let defaultersCount = 0;
-    facultyScopedStudents.forEach((s) => {
-      const stat = byStudentHours[s.id] || { attended: 0, total: 0 };
-      const pct = stat.total > 0 ? (stat.attended / stat.total) * 100 : 0;
-      if (pct < 85) defaultersCount++;
-    });
     const totalDays = Object.keys(byDate).length;
     const attendedDays = Object.values(byDate).filter((d) => d.attended > 0 && d.total > 0).length;
 
@@ -680,9 +732,9 @@ export const FacultyLayout: React.FC = () => {
       totalHours: Math.round(totalHours * 100) / 100,
       attendedDays,
       totalDays,
-      defaultersCount,
+      defaultersCount: facultyDefaulters.length,
     };
-  }, [facultyScopedRecords, facultyScopedStudents]);
+  }, [facultyScopedRecords, facultyScopedStudents, facultyDefaulters.length]);
 
   const facultyWeeklyTrend = useMemo(() => {
     const records = facultyScopedRecords;
@@ -788,6 +840,50 @@ export const FacultyLayout: React.FC = () => {
       });
     }
   }, [apiProfile, user?.email]);
+
+  // Load defaulters data for faculty dashboard
+  useEffect(() => {
+    if (activeTab !== 'dashboard' || facultyDeptCodes.length === 0) return;
+    
+    const loadDefaulters = async () => {
+      try {
+        const [studentsRes, attRes] = await Promise.all([
+          fetch(apiUrl('/api/users/?role=student'), { credentials: 'include' }),
+          fetch(apiUrl('/api/attendance/'), { credentials: 'include' }),
+        ]);
+        
+        const studentsList = studentsRes.ok ? await studentsRes.json() : [];
+        const attData = attRes.ok ? await attRes.json() : { records: [] };
+        const records = Array.isArray(attData.records) ? attData.records : [];
+        
+        // Filter students by faculty's assigned departments and sections
+        const facultyScopedStudents = studentsList.filter((s: { department: string | null; section: string | null; sections?: string[] }) => {
+          // Check if student is in faculty's departments
+          const inDept = facultyDeptCodes.includes(s.department || '');
+          if (!inDept) return false;
+          
+          // Check if student is in faculty's assigned sections (if any)
+          const facultyDeptSections = user?.faculty_department_sections || [];
+          if (facultyDeptSections.length > 0) {
+            const studentSections = s.sections || (s.section ? [s.section] : []);
+            return facultyDeptSections.some((fds: { department_code: string; section_name: string }) => {
+              return fds.department_code === s.department && studentSections.includes(fds.section_name);
+            });
+          }
+          
+          return true;
+        });
+        
+        const defaultersList = computeFacultyDefaultersList(facultyScopedStudents, records);
+        setFacultyDefaulters(defaultersList);
+      } catch (error) {
+        console.error('Failed to load defaulters:', error);
+        setFacultyDefaulters([]);
+      }
+    };
+    
+    loadDefaulters();
+  }, [activeTab, facultyDeptCodes.join(','), user?.faculty_department_sections]);
 
   const handleSaveProfile = async () => {
     if (facultyId == null) return;
@@ -955,11 +1051,112 @@ export const FacultyLayout: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-amber-600">{facultyDashboardMetrics.defaultersCount}</div>
+                  <div className="text-2xl font-bold text-amber-600">{facultyDefaulters.length}</div>
                   <p className="text-xs text-muted-foreground">Your students below 85%</p>
                 </CardContent>
               </Card>
             </div>
+
+            {/* Defaulters Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Defaulters List</CardTitle>
+                <CardDescription>Students with attendance below 85% in your assigned sections</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Filters */}
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      placeholder="Search by name, roll number..."
+                      value={defaultersSearchQuery}
+                      onChange={(e) => setDefaultersSearchQuery(e.target.value)}
+                      className="max-w-xs"
+                    />
+                    <Select value={defaulterMinPct} onValueChange={setDefaulterMinPct}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Min %" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">0%</SelectItem>
+                        <SelectItem value="50">50%</SelectItem>
+                        <SelectItem value="60">60%</SelectItem>
+                        <SelectItem value="70">70%</SelectItem>
+                        <SelectItem value="75">75%</SelectItem>
+                        <SelectItem value="80">80%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={defaulterMaxPct} onValueChange={setDefaulterMaxPct}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Max %" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="70">70%</SelectItem>
+                        <SelectItem value="75">75%</SelectItem>
+                        <SelectItem value="80">80%</SelectItem>
+                        <SelectItem value="85">85%</SelectItem>
+                        <SelectItem value="90">90%</SelectItem>
+                        <SelectItem value="100">100%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Defaulters Table */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Roll Number</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Department</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Section</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Attendance %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {facultyDefaulters.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                              No defaulters found in your assigned sections
+                            </td>
+                          </tr>
+                        ) : (
+                          facultyDefaulters
+                            .filter((s) => {
+                              const q = defaultersSearchQuery.trim().toLowerCase();
+                              if (q) {
+                                const name = (s.full_name || '').toLowerCase();
+                                const roll = (s.roll_number || '').toLowerCase();
+                                const user = (s.username || '').toLowerCase();
+                                if (!name.includes(q) && !roll.includes(q) && !user.includes(q)) return false;
+                              }
+                              const minPct = Number(defaulterMinPct);
+                              const maxPct = Number(defaulterMaxPct);
+                              if (s.attendancePercentage < minPct || s.attendancePercentage > maxPct) return false;
+                              return true;
+                            })
+                            .map((defaulter) => (
+                              <tr key={defaulter.id} className="border-t hover:bg-muted/50">
+                                <td className="px-4 py-2 text-sm">{defaulter.full_name || '-'}</td>
+                                <td className="px-4 py-2 text-sm">{defaulter.roll_number || '-'}</td>
+                                <td className="px-4 py-2 text-sm">{defaulter.department || '-'}</td>
+                                <td className="px-4 py-2 text-sm">{defaulter.section || '-'}</td>
+                                <td className="px-4 py-2 text-sm">{defaulter.year || '-'}</td>
+                                <td className="px-4 py-2 text-sm">
+                                  <Badge variant={defaulter.attendancePercentage < 75 ? 'destructive' : 'secondary'}>
+                                    {defaulter.attendancePercentage.toFixed(1)}%
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             <div className="flex flex-wrap gap-2">
               <Button className="rounded-xl" onClick={() => setActiveTab('attendance')}>

@@ -10,10 +10,10 @@ from openpyxl import load_workbook, Workbook
 import datetime
 import re
 from decimal import Decimal
-from .models import User, Attendance, Department, Subject, Section, AttendancePortalControl
+from .models import User, Attendance, Department, Subject, Section, AttendancePortalControl, FacultyDepartmentSection
 from .serializers import (
     RegisterSerializer, LoginSerializer, AttendanceSerializer, UserSerializer,
-    DepartmentSerializer, SubjectSerializer, SectionSerializer,
+    DepartmentSerializer, SubjectSerializer, SectionSerializer, FacultyDepartmentSectionSerializer,
 )
 
 
@@ -44,6 +44,85 @@ def _q_user_section_token(section_name: str) -> Q:
         | Q(section__endswith=f',{n}')
         | Q(section__contains=f',{n},')
     )
+
+
+def _get_faculty_department_sections(user):
+    """Get faculty department-section assignments as a list of dicts."""
+    if user.role != 'faculty':
+        return []
+    assignments = FacultyDepartmentSection.objects.filter(faculty=user).select_related('department', 'section')
+    return [
+        {
+            'department_code': assignment.department.code,
+            'section_name': assignment.section.name
+        }
+        for assignment in assignments
+    ]
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def faculty_department_sections_view(request, user_id=None):
+    """Get or set faculty department-section assignments.
+    
+    GET: Return department-section assignments for a faculty member.
+    POST: Update department-section assignments for a faculty member (admin only).
+    """
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    
+    # Determine target faculty
+    if user_id:
+        if not is_admin:
+            return Response({"detail": "Admin only."}, status=403)
+        try:
+            target = User.objects.get(pk=user_id, role='faculty')
+        except User.DoesNotExist:
+            return Response({"detail": "Faculty not found."}, status=404)
+    else:
+        # Non-admin users can only view their own assignments
+        target = request.user
+        if target.role != 'faculty':
+            return Response({"detail": "Only faculty have department-section assignments."}, status=400)
+    
+    if request.method == 'GET':
+        assignments = FacultyDepartmentSection.objects.filter(faculty=target).select_related('department', 'section')
+        serializer = FacultyDepartmentSectionSerializer(assignments, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        if not is_admin:
+            return Response({"detail": "Admin only."}, status=403)
+        
+        data = request.data
+        if not isinstance(data, list):
+            return Response({"detail": "Expected a list of department-section assignments."}, status=400)
+        
+        # Delete existing assignments
+        FacultyDepartmentSection.objects.filter(faculty=target).delete()
+        
+        # Create new assignments
+        created_assignments = []
+        for assignment in data:
+            dept_code = assignment.get('department_code')
+            section_name = assignment.get('section_name')
+            if dept_code and section_name:
+                try:
+                    department = Department.objects.get(code=dept_code)
+                    section = Section.objects.get(name=section_name)
+                    fds = FacultyDepartmentSection.objects.create(
+                        faculty=target,
+                        department=department,
+                        section=section
+                    )
+                    created_assignments.append(fds)
+                except (Department.DoesNotExist, Section.DoesNotExist):
+                    return Response(
+                        {"detail": f"Invalid department '{dept_code}' or section '{section_name}'."},
+                        status=400
+                    )
+        
+        serializer = FacultyDepartmentSectionSerializer(created_assignments, many=True)
+        return Response(serializer.data, status=201)
 
 
 def _get_attendance_portal_control() -> AttendancePortalControl:
@@ -100,6 +179,10 @@ def attendance_portal_freeze_view(request):
 @permission_classes([AllowAny])
 def register(request):
     data = request.data.copy()
+    
+    # Extract faculty department-section assignments before creating user
+    faculty_dept_sections = data.pop('faculty_department_sections', None)
+    
     if 'departments' in data:
         depts = data.get('departments')
         data['department'] = ','.join(depts) if isinstance(depts, (list, tuple)) else (depts or '')
@@ -113,7 +196,26 @@ def register(request):
         data.pop('sections', None)
     serializer = RegisterSerializer(data=data)
     if serializer.is_valid():
-        serializer.save()
+        user = serializer.save()
+        
+        # Create faculty department-section assignments if provided and user is faculty
+        if faculty_dept_sections and user.role == 'faculty':
+            for assignment in faculty_dept_sections:
+                dept_code = assignment.get('department_code')
+                section_name = assignment.get('section_name')
+                if dept_code and section_name:
+                    try:
+                        department = Department.objects.get(code=dept_code)
+                        section = Section.objects.get(name=section_name)
+                        FacultyDepartmentSection.objects.create(
+                            faculty=user,
+                            department=department,
+                            section=section
+                        )
+                    except (Department.DoesNotExist, Section.DoesNotExist):
+                        # Skip invalid assignments
+                        pass
+        
         return Response(serializer.data, status=201)
     return Response(serializer.errors, status=400)
 
@@ -140,6 +242,7 @@ def login_view(request):
             "username": user.username,
             "full_name": user.full_name or user.username,
             "department": user.department or "",
+            "faculty_department_sections": _get_faculty_department_sections(user) if role == 'faculty' else []
         })
 
     return Response(serializer.errors, status=400)
@@ -476,6 +579,28 @@ def user_detail_view(request, pk):
         if 'sections' in data:
             data['section'] = _sections_list_to_csv(data.get('sections'))
             data.pop('sections', None)
+        
+        # Handle faculty department-section assignments
+        faculty_dept_sections = data.pop('faculty_department_sections', None)
+        if faculty_dept_sections is not None and target.role == 'faculty':
+            # Delete existing assignments
+            FacultyDepartmentSection.objects.filter(faculty=target).delete()
+            # Create new assignments
+            for assignment in faculty_dept_sections:
+                dept_code = assignment.get('department_code')
+                section_name = assignment.get('section_name')
+                if dept_code and section_name:
+                    try:
+                        department = Department.objects.get(code=dept_code)
+                        section = Section.objects.get(name=section_name)
+                        FacultyDepartmentSection.objects.create(
+                            faculty=target,
+                            department=department,
+                            section=section
+                        )
+                    except (Department.DoesNotExist, Section.DoesNotExist):
+                        # Skip invalid assignments
+                        pass
         if 'is_detained' in data:
             if not is_admin or target.role != 'student':
                 data.pop('is_detained', None)

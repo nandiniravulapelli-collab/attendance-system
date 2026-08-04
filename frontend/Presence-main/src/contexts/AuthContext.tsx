@@ -9,6 +9,7 @@ interface User {
   departmentId?: string;
   rollNumber?: string;
   subjects?: string[];
+  faculty_department_sections?: Array<{ department_code: string; section_name: string }>;
 }
 
 interface AuthContextType {
@@ -83,6 +84,7 @@ const login = async (
       role: data.role,
       departmentId: data.department ?? "",
       rollNumber: data.username,
+      faculty_department_sections: data.faculty_department_sections || [],
     };
 
     setUser(loggedUser);

@@ -1,6 +1,6 @@
 
 from rest_framework import serializers
-from .models import User, Attendance, Department, Subject, Section
+from .models import User, Attendance, Department, Subject, Section, FacultyDepartmentSection
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 
@@ -76,6 +76,7 @@ class UserSerializer(serializers.ModelSerializer):
     departments = serializers.SerializerMethodField(read_only=True)
     subjects = serializers.SerializerMethodField(read_only=True)
     sections = serializers.SerializerMethodField(read_only=True)
+    faculty_department_sections = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
@@ -84,7 +85,7 @@ class UserSerializer(serializers.ModelSerializer):
             'full_name', 'roll_number', 'phone',
             'department', 'departments', 'section', 'sections', 'year',
             'is_detained',
-            'assigned_subject_ids', 'subjects'
+            'assigned_subject_ids', 'subjects', 'faculty_department_sections'
         )
         read_only_fields = ('id', 'username', 'role')
         extra_kwargs = {'assigned_subject_ids': {'required': False}, 'is_detained': {'required': False}}
@@ -102,6 +103,19 @@ class UserSerializer(serializers.ModelSerializer):
     def get_sections(self, obj):
         s = (obj.section or '').strip()
         return [x.strip() for x in s.split(',') if x.strip()] if s else []
+
+    def get_faculty_department_sections(self, obj):
+        """Return faculty department-section assignments for faculty users."""
+        if obj.role != 'faculty':
+            return []
+        assignments = FacultyDepartmentSection.objects.filter(faculty=obj).select_related('department', 'section')
+        return [
+            {
+                'department_code': assignment.department.code,
+                'section_name': assignment.section.name
+            }
+            for assignment in assignments
+        ]
 
     def update(self, instance, validated_data):
         # Username/role are read-only on the serializer; email may be updated by allowed users.
@@ -161,3 +175,20 @@ class SubjectSerializer(serializers.ModelSerializer):
         if departments is not None:
             instance.departments.set(departments)
         return instance
+
+
+class FacultyDepartmentSectionSerializer(serializers.ModelSerializer):
+    """Serializer for faculty department-section assignments."""
+    department_code = serializers.SerializerMethodField(read_only=True)
+    section_name = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = FacultyDepartmentSection
+        fields = ('id', 'faculty', 'department', 'section', 'department_code', 'section_name')
+        read_only_fields = ('id', 'faculty')
+
+    def get_department_code(self, obj):
+        return obj.department.code if obj.department else None
+
+    def get_section_name(self, obj):
+        return obj.section.name if obj.section else None

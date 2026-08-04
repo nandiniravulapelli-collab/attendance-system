@@ -113,13 +113,15 @@ export const AdminLayout: React.FC = () => {
     departmentIds: string[];
     phone: string;
     subjects: string[];
+    departmentSections: Array<{ departmentCode: string; sectionNames: string[] }>;
   }>({
     name: '',
     email: '',
     password: '',
     departmentIds: [],
     phone: '',
-    subjects: []
+    subjects: [],
+    departmentSections: []
   });
 
   // Students from backend API (for edit after registration)
@@ -1613,7 +1615,8 @@ export const AdminLayout: React.FC = () => {
       password: '',
       departmentIds: [],
       phone: '',
-      subjects: []
+      subjects: [],
+      departmentSections: []
     });
     setIsFacultyDialogOpen(true);
   };
@@ -1632,7 +1635,11 @@ export const AdminLayout: React.FC = () => {
         password: '',
         departmentIds: depts,
         phone: member.phone ?? '',
-        subjects: subjectIds
+        subjects: subjectIds,
+        departmentSections: depts.map((deptCode: string) => ({
+          departmentCode: deptCode,
+          sectionNames: []
+        }))
       });
       setIsFacultyDialogOpen(true);
     }
@@ -1682,6 +1689,21 @@ export const AdminLayout: React.FC = () => {
         return;
       }
 
+      // Build faculty department-section assignments
+      const facultyDepartmentSections: Array<{ department_code: string; section_name: string }> = [];
+      facultyFormData.departmentSections.forEach(({ departmentCode, sectionNames }) => {
+        if (deptIds.includes(departmentCode)) {
+          sectionNames.forEach(sectionName => {
+            if (sectionName.trim()) {
+              facultyDepartmentSections.push({
+                department_code: departmentCode,
+                section_name: sectionName.trim()
+              });
+            }
+          });
+        }
+      });
+
       if (selectedFaculty) {
         const res = await fetch(apiUrl(`/api/users/${selectedFaculty}/`), {
           method: 'PATCH',
@@ -1693,7 +1715,8 @@ export const AdminLayout: React.FC = () => {
             ...(facultyFormData.password ? { new_password: facultyFormData.password } : {}),
             phone: facultyFormData.phone || '',
             departments: deptIds,
-            subjects: facultyFormData.subjects || []
+            subjects: facultyFormData.subjects || [],
+            faculty_department_sections: facultyDepartmentSections
           })
         });
         if (res.ok) {
@@ -1719,6 +1742,7 @@ export const AdminLayout: React.FC = () => {
             phone: facultyFormData.phone || '',
             departments: deptIds,
             subjects: facultyFormData.subjects || [],
+            faculty_department_sections: facultyDepartmentSections,
             roll_number: '',
             section: '',
             year: ''
@@ -1745,7 +1769,8 @@ export const AdminLayout: React.FC = () => {
         password: '',
         departmentIds: [],
         phone: '',
-        subjects: []
+        subjects: [],
+        departmentSections: []
       });
     } catch (error: any) {
       toast({
@@ -3312,7 +3337,13 @@ export const AdminLayout: React.FC = () => {
                                   const next = checked
                                     ? [...facultyFormData.departmentIds, dept.code]
                                     : facultyFormData.departmentIds.filter((c: string) => c !== dept.code);
-                                  setFacultyFormData({ ...facultyFormData, departmentIds: next });
+                                  setFacultyFormData({ 
+                                    ...facultyFormData, 
+                                    departmentIds: next,
+                                    departmentSections: checked
+                                      ? [...facultyFormData.departmentSections, { departmentCode: dept.code, sectionNames: [] }]
+                                      : facultyFormData.departmentSections.filter(ds => ds.departmentCode !== dept.code)
+                                  });
                                 }}
                               />
                               <label
@@ -3323,6 +3354,65 @@ export const AdminLayout: React.FC = () => {
                               </label>
                             </div>
                           ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Department Sections</Label>
+                    <p className="text-xs text-muted-foreground">Select sections for each assigned department.</p>
+                    <div className="border rounded-lg p-4 max-h-60 overflow-y-auto">
+                      {facultyFormData.departmentIds.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Select departments first to assign sections.</p>
+                      ) : (
+                        <div className="space-y-4">
+                          {facultyFormData.departmentIds.map((deptCode) => {
+                            const dept = apiDepartments.find((d: { code: string }) => d.code === deptCode);
+                            const deptSectionEntry = facultyFormData.departmentSections.find(
+                              (ds) => ds.departmentCode === deptCode
+                            );
+                            const selectedSections = deptSectionEntry?.sectionNames || [];
+                            
+                            return (
+                              <div key={deptCode} className="space-y-2">
+                                <div className="font-medium text-sm">{dept?.code} - {dept?.name}</div>
+                                <div className="flex flex-wrap gap-2">
+                                  {apiSections.map((section: { id: number; name: string }) => (
+                                    <div key={section.id} className="flex items-center space-x-2">
+                                      <Checkbox
+                                        id={`section-${deptCode}-${section.id}`}
+                                        checked={selectedSections.includes(section.name)}
+                                        onCheckedChange={(checked) => {
+                                          const next = checked
+                                            ? [...selectedSections, section.name]
+                                            : selectedSections.filter((s) => s !== section.name);
+                                          setFacultyFormData(prev => ({
+                                            ...prev,
+                                            departmentSections: prev.departmentSections.map(ds =>
+                                              ds.departmentCode === deptCode
+                                                ? { ...ds, sectionNames: next }
+                                                : ds
+                                            ).concat(
+                                              prev.departmentSections.find(ds => ds.departmentCode === deptCode)
+                                                ? []
+                                                : [{ departmentCode: deptCode, sectionNames: next }]
+                                            )
+                                          }));
+                                        }}
+                                      />
+                                      <label
+                                        htmlFor={`section-${deptCode}-${section.id}`}
+                                        className="text-sm cursor-pointer"
+                                      >
+                                        {section.name}
+                                      </label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
