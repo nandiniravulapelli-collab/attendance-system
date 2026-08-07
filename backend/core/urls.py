@@ -23,6 +23,10 @@ from .views import (
     sample_subjects_excel_view,
     sample_bulk_attendance_excel_view,
     faculty_department_sections_view,
+    qr_attendance_sessions_view,
+    qr_attendance_session_detail_view,
+    qr_attendance_mark_view,
+    qr_attendance_records_view,
 )
 
 urlpatterns = [
@@ -49,4 +53,8 @@ urlpatterns = [
     path('samples/subjects/', sample_subjects_excel_view),
     path('samples/bulk-attendance/', sample_bulk_attendance_excel_view),
     path('faculty-department-sections/<int:user_id>/', faculty_department_sections_view),
+    path('qr-attendance/sessions/', qr_attendance_sessions_view),
+    path('qr-attendance/sessions/<int:session_id>/', qr_attendance_session_detail_view),
+    path('qr-attendance/mark/', qr_attendance_mark_view),
+    path('qr-attendance/sessions/<int:session_id>/records/', qr_attendance_records_view),
 ]

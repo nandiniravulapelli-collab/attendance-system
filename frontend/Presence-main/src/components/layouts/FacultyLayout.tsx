@@ -155,6 +155,33 @@ export const FacultyLayout: React.FC = () => {
   const [defaulterMinPct, setDefaulterMinPct] = useState<string>('0');
   const [defaulterMaxPct, setDefaulterMaxPct] = useState<string>('85');
 
+  /** QR Attendance state */
+  const [qrSessions, setQrSessions] = useState<Array<{
+    id: number;
+    subject: string;
+    year: string;
+    branch: string;
+    sections: string;
+    duration_minutes: number;
+    start_time: string;
+    end_time: string;
+    is_active: boolean;
+    attendance_count: number;
+    is_expired: boolean;
+  }>>([]);
+  const [activeQrSession, setActiveQrSession] = useState<any>(null);
+  const [qrCodeImage, setQrCodeImage] = useState<string | null>(null);
+  const [qrRefreshInterval, setQrRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [qrSessionForm, setQrSessionForm] = useState({
+    subject: '',
+    year: '1',
+    branch: '',
+    sections: [] as string[],
+    duration_minutes: 10
+  });
+  const [qrSessionDialogOpen, setQrSessionDialogOpen] = useState(false);
+  const [qrAttendanceRecords, setQrAttendanceRecords] = useState<Array<any>>([]);
+
   /** Assigned subject ids/codes from API — only these subjects appear for this faculty */
   const [facultyAssignedSubjectTokens, setFacultyAssignedSubjectTokens] = useState<string[]>([]);
 
@@ -950,6 +977,173 @@ export const FacultyLayout: React.FC = () => {
     }
   };
 
+  // QR Attendance Handlers
+  const handleStartQrSession = async () => {
+    if (!qrSessionForm.subject || !qrSessionForm.branch || qrSessionForm.sections.length === 0) {
+      toast({ title: 'Validation Error', description: 'Please fill in all required fields.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          subject: qrSessionForm.subject,
+          year: qrSessionForm.year,
+          branch: qrSessionForm.branch,
+          sections: qrSessionForm.sections,
+          duration_minutes: qrSessionForm.duration_minutes
+        })
+      });
+
+      if (res.ok) {
+        const session = await res.json();
+        setQrSessionDialogOpen(false);
+        setQrSessionForm({
+          subject: '',
+          year: '1',
+          branch: '',
+          sections: [],
+          duration_minutes: 10
+        });
+        handleActivateQrSession(session.id);
+        toast({ title: 'Session Started', description: 'QR attendance session is now active.' });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: 'Error', description: err.detail || 'Failed to start session.', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
+  const handleActivateQrSession = async (sessionId: number) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`), {
+        credentials: 'include'
+      });
+
+      if (res.ok) {
+        const session = await res.json();
+        setActiveQrSession(session);
+        setQrCodeImage(session.qr_code_image);
+        
+        // Start QR refresh interval
+        if (qrRefreshInterval) {
+          clearInterval(qrRefreshInterval);
+        }
+        
+        const interval = setInterval(async () => {
+          try {
+            const refreshRes = await fetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`), {
+              credentials: 'include'
+            });
+            if (refreshRes.ok) {
+              const refreshedSession = await refreshRes.json();
+              if (refreshedSession.qr_code_image) {
+                setQrCodeImage(refreshedSession.qr_code_image);
+              }
+              if (!refreshedSession.is_active || refreshedSession.is_expired) {
+                clearInterval(interval);
+                setActiveQrSession(null);
+                setQrCodeImage(null);
+                loadQrSessions();
+              }
+            }
+          } catch (error) {
+            console.error('Error refreshing QR:', error);
+          }
+        }, 5000); // Refresh every 5 seconds
+        
+        setQrRefreshInterval(interval);
+      } else {
+        toast({ title: 'Error', description: 'Failed to load session.', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
+  const handleCloseQrSession = async () => {
+    if (!activeQrSession) return;
+
+    try {
+      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${activeQrSession.id}/`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ is_active: false })
+      });
+
+      if (res.ok) {
+        if (qrRefreshInterval) {
+          clearInterval(qrRefreshInterval);
+          setQrRefreshInterval(null);
+        }
+        setActiveQrSession(null);
+        setQrCodeImage(null);
+        loadQrSessions();
+        toast({ title: 'Session Closed', description: 'Attendance session has been closed.' });
+      } else {
+        toast({ title: 'Error', description: 'Failed to close session.', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
+  const handleViewQrRecords = async () => {
+    if (!activeQrSession) return;
+
+    try {
+      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${activeQrSession.id}/records/`), {
+        credentials: 'include'
+      });
+
+      if (res.ok) {
+        const records = await res.json();
+        setQrAttendanceRecords(records);
+      } else {
+        toast({ title: 'Error', description: 'Failed to load records.', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
+  const loadQrSessions = async () => {
+    try {
+      const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
+        credentials: 'include'
+      });
+
+      if (res.ok) {
+        const sessions = await res.json();
+        setQrSessions(sessions);
+      }
+    } catch (error) {
+      console.error('Error loading QR sessions:', error);
+    }
+  };
+
+  // Load QR sessions when tab becomes active
+  useEffect(() => {
+    if (activeTab === 'qr-attendance') {
+      loadQrSessions();
+    }
+  }, [activeTab]);
+
+  // Cleanup intervals on unmount
+  useEffect(() => {
+    return () => {
+      if (qrRefreshInterval) {
+        clearInterval(qrRefreshInterval);
+      }
+    };
+  }, [qrRefreshInterval]);
+
   const handleFacultyChangePassword = async () => {
     if (facultyId == null) return;
     if (changePasswordForm.new_password !== changePasswordForm.confirm_password) {
@@ -1016,6 +1210,7 @@ export const FacultyLayout: React.FC = () => {
           <TabsList className="mb-6 flex flex-wrap gap-1.5 h-auto p-1.5 rounded-xl bg-muted/80">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="attendance" disabled={isFacultyAttendanceFrozen}>Mark Attendance</TabsTrigger>
+            <TabsTrigger value="qr-attendance" disabled={isFacultyAttendanceFrozen}>QR Attendance</TabsTrigger>
             <TabsTrigger value="student-attendance" disabled={isFacultyAttendanceFrozen}>Student Attendance</TabsTrigger>
             <TabsTrigger value="reports" disabled={isFacultyAttendanceFrozen}>My Reports</TabsTrigger>
             <TabsTrigger value="subjects">My Subjects</TabsTrigger>
@@ -1548,6 +1743,179 @@ export const FacultyLayout: React.FC = () => {
             )}
           </TabsContent>
 
+          {/* QR Attendance Tab */}
+          <TabsContent value="qr-attendance" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <CardTitle>QR Attendance</CardTitle>
+                  <CardDescription>Start QR-based attendance sessions for quick student check-in</CardDescription>
+                </div>
+                <Button onClick={() => setQrSessionDialogOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Start New Session
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {activeQrSession ? (
+                  <div className="space-y-6">
+                    {/* Active Session Display */}
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                      <div className="flex flex-col md:flex-row gap-6">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold mb-4">Active Session</h3>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-sm text-muted-foreground">Subject:</span>
+                              <span className="font-medium">{activeQrSession.subject}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-sm text-muted-foreground">Year:</span>
+                              <span className="font-medium">{activeQrSession.year}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-sm text-muted-foreground">Branch:</span>
+                              <span className="font-medium">{activeQrSession.branch}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-sm text-muted-foreground">Sections:</span>
+                              <span className="font-medium">{activeQrSession.sections}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-sm text-muted-foreground">Duration:</span>
+                              <span className="font-medium">{activeQrSession.duration_minutes} minutes</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-sm text-muted-foreground">Attendance Count:</span>
+                              <span className="font-medium text-green-600">{activeQrSession.attendance_count}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          {qrCodeImage ? (
+                            <div className="bg-white p-4 rounded-lg shadow-md">
+                              <img src={qrCodeImage} alt="QR Code" className="w-48 h-48" />
+                            </div>
+                          ) : (
+                            <div className="w-48 h-48 bg-gray-200 rounded-lg flex items-center justify-center">
+                              <span className="text-sm text-muted-foreground">Loading QR...</span>
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-2">QR refreshes every 5 seconds</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex gap-2">
+                        <Button 
+                          variant="destructive" 
+                          onClick={handleCloseQrSession}
+                        >
+                          Close Session
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          onClick={handleViewQrRecords}
+                        >
+                          View Records
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {qrSessions.length === 0 ? (
+                      <div className="text-center py-12">
+                        <p className="text-muted-foreground mb-4">No QR attendance sessions found</p>
+                        <Button onClick={() => setQrSessionDialogOpen(true)}>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Start First Session
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="border rounded-lg overflow-hidden">
+                        <table className="w-full">
+                          <thead className="bg-muted">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Subject</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Branch</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Sections</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Duration</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Attendance</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Status</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {qrSessions.map((session) => (
+                              <tr key={session.id} className="border-t hover:bg-muted/50">
+                                <td className="px-4 py-2 text-sm">{session.subject}</td>
+                                <td className="px-4 py-2 text-sm">{session.year}</td>
+                                <td className="px-4 py-2 text-sm">{session.branch}</td>
+                                <td className="px-4 py-2 text-sm">{session.sections}</td>
+                                <td className="px-4 py-2 text-sm">{session.duration_minutes} min</td>
+                                <td className="px-4 py-2 text-sm">{session.attendance_count}</td>
+                                <td className="px-4 py-2 text-sm">
+                                  <Badge variant={session.is_active ? 'default' : 'secondary'}>
+                                    {session.is_active ? 'Active' : 'Closed'}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-2 text-sm">
+                                  {session.is_active && (
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => handleActivateQrSession(session.id)}
+                                    >
+                                      View
+                                    </Button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* QR Attendance Records Dialog */}
+            {qrAttendanceRecords.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Attendance Records</CardTitle>
+                  <CardDescription>Students who marked attendance via QR</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Roll Number</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Section</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Scanned At</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {qrAttendanceRecords.map((record) => (
+                          <tr key={record.id} className="border-t hover:bg-muted/50">
+                            <td className="px-4 py-2 text-sm">{record.student_name}</td>
+                            <td className="px-4 py-2 text-sm">{record.student_roll_number}</td>
+                            <td className="px-4 py-2 text-sm">{record.student_section}</td>
+                            <td className="px-4 py-2 text-sm">{new Date(record.scanned_at).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
           {/* Student Attendance: subject-wise and overall % */}
           <TabsContent value="student-attendance" className="space-y-6">
             {isFacultyAttendanceFrozen && (
@@ -2069,6 +2437,99 @@ export const FacultyLayout: React.FC = () => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* QR Attendance Session Dialog */}
+          <Dialog open={qrSessionDialogOpen} onOpenChange={setQrSessionDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Start QR Attendance Session</DialogTitle>
+                <DialogDescription>Configure the attendance session parameters</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="qr-subject">Subject *</Label>
+                  <Select value={qrSessionForm.subject} onValueChange={(value) => setQrSessionForm({...qrSessionForm, subject: value})}>
+                    <SelectTrigger id="qr-subject">
+                      <SelectValue placeholder="Select subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {subjectsAll.map((subject) => (
+                        <SelectItem key={subject.id} value={subject.code}>
+                          {subject.code} - {subject.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="qr-year">Year *</Label>
+                  <Select value={qrSessionForm.year} onValueChange={(value) => setQrSessionForm({...qrSessionForm, year: value})}>
+                    <SelectTrigger id="qr-year">
+                      <SelectValue placeholder="Select year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Year 1</SelectItem>
+                      <SelectItem value="2">Year 2</SelectItem>
+                      <SelectItem value="3">Year 3</SelectItem>
+                      <SelectItem value="4">Year 4</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="qr-branch">Branch *</Label>
+                  <Select value={qrSessionForm.branch} onValueChange={(value) => setQrSessionForm({...qrSessionForm, branch: value})}>
+                    <SelectTrigger id="qr-branch">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {facultyBranchOptions.map((dept) => (
+                        <SelectItem key={dept.code} value={dept.code}>
+                          {dept.code} - {dept.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="qr-sections">Sections *</Label>
+                  <div className="border rounded-lg p-3 max-h-32 overflow-y-auto">
+                    {apiSections.map((section) => (
+                      <div key={section.id} className="flex items-center space-x-2 mb-2">
+                        <Checkbox
+                          id={`qr-section-${section.id}`}
+                          checked={qrSessionForm.sections.includes(section.name)}
+                          onCheckedChange={(checked) => {
+                            const next = checked
+                              ? [...qrSessionForm.sections, section.name]
+                              : qrSessionForm.sections.filter(s => s !== section.name);
+                            setQrSessionForm({...qrSessionForm, sections: next});
+                          }}
+                        />
+                        <label htmlFor={`qr-section-${section.id}`} className="text-sm cursor-pointer">
+                          {section.name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="qr-duration">Duration (minutes) *</Label>
+                  <Input
+                    id="qr-duration"
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={qrSessionForm.duration_minutes}
+                    onChange={(e) => setQrSessionForm({...qrSessionForm, duration_minutes: parseInt(e.target.value) || 10})}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setQrSessionDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleStartQrSession}>Start Session</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Profile */}
           <TabsContent value="profile" className="space-y-6 mt-6">

@@ -1,6 +1,6 @@
 
 from rest_framework import serializers
-from .models import User, Attendance, Department, Subject, Section, FacultyDepartmentSection
+from .models import User, Attendance, Department, Subject, Section, FacultyDepartmentSection, QRAttendanceSession, QRAttendanceRecord
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 
@@ -192,3 +192,54 @@ class FacultyDepartmentSectionSerializer(serializers.ModelSerializer):
 
     def get_section_name(self, obj):
         return obj.section.name if obj.section else None
+
+
+class QRAttendanceSessionSerializer(serializers.ModelSerializer):
+    """Serializer for QR attendance sessions."""
+    faculty_name = serializers.SerializerMethodField(read_only=True)
+    attendance_count = serializers.SerializerMethodField(read_only=True)
+    is_expired = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = QRAttendanceSession
+        fields = (
+            'id', 'faculty', 'faculty_name', 'subject', 'year', 'branch', 'sections',
+            'duration_minutes', 'start_time', 'end_time', 'is_active', 
+            'current_qr_token', 'token_expires_at', 'token_refresh_interval',
+            'attendance_count', 'is_expired'
+        )
+        read_only_fields = ('id', 'faculty', 'start_time', 'current_qr_token', 'token_expires_at')
+
+    def get_faculty_name(self, obj):
+        return obj.faculty.full_name or obj.faculty.username
+
+    def get_attendance_count(self, obj):
+        return obj.attendance_records.count()
+
+    def get_is_expired(self, obj):
+        from django.utils import timezone
+        return timezone.now() > obj.end_time
+
+
+class QRAttendanceRecordSerializer(serializers.ModelSerializer):
+    """Serializer for QR attendance records."""
+    student_name = serializers.SerializerMethodField(read_only=True)
+    student_roll_number = serializers.SerializerMethodField(read_only=True)
+    student_section = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = QRAttendanceRecord
+        fields = (
+            'id', 'session', 'student', 'student_name', 'student_roll_number', 
+            'student_section', 'device_id', 'scanned_at'
+        )
+        read_only_fields = ('id', 'session', 'student', 'scanned_at')
+
+    def get_student_name(self, obj):
+        return obj.student.full_name or obj.student.username
+
+    def get_student_roll_number(self, obj):
+        return obj.student.roll_number
+
+    def get_student_section(self, obj):
+        return obj.student.section

@@ -4,16 +4,23 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
 from django.contrib.auth import login
 from django.views.decorators.csrf import csrf_exempt
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
+from django.utils import timezone
 from openpyxl import load_workbook, Workbook
 import datetime
 import re
+import secrets
+import hashlib
+import qrcode
+import io
+import base64
 from decimal import Decimal
-from .models import User, Attendance, Department, Subject, Section, AttendancePortalControl, FacultyDepartmentSection
+from .models import User, Attendance, Department, Subject, Section, AttendancePortalControl, FacultyDepartmentSection, QRAttendanceSession, QRAttendanceRecord
 from .serializers import (
     RegisterSerializer, LoginSerializer, AttendanceSerializer, UserSerializer,
     DepartmentSerializer, SubjectSerializer, SectionSerializer, FacultyDepartmentSectionSerializer,
+    QRAttendanceSessionSerializer, QRAttendanceRecordSerializer,
 )
 
 
@@ -58,6 +65,37 @@ def _get_faculty_department_sections(user):
         }
         for assignment in assignments
     ]
+
+
+def _generate_qr_token():
+    """Generate a secure random token for QR attendance."""
+    return secrets.token_urlsafe(32)
+
+
+def _hash_device_id(device_id: str) -> str:
+    """Hash device ID for consistent identification."""
+    return hashlib.sha256(device_id.encode()).hexdigest()
+
+
+def _generate_qr_code_base64(token: str) -> str:
+    """Generate QR code as base64 encoded image."""
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(token)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Convert to base64
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    img_str = base64.b64encode(buffer.getvalue()).decode()
+    
+    return f"data:image/png;base64,{img_str}"
 
 
 @api_view(['GET', 'POST'])
@@ -1967,3 +2005,264 @@ def sample_bulk_attendance_excel_view(request):
     response['Content-Disposition'] = 'attachment; filename="sample_bulk_attendance.xlsx"'
     wb.save(response)
     return response
+
+
+# QR Attendance API Endpoints
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def qr_attendance_sessions_view(request):
+    """Create or list QR attendance sessions."""
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    is_faculty = request.user.role == 'faculty'
+    
+    if not (is_admin or is_faculty):
+        return Response({"detail": "Faculty or admin only."}, status=403)
+    
+    if request.method == 'GET':
+        # List sessions
+        if is_admin:
+            sessions = QRAttendanceSession.objects.all()
+        else:
+            sessions = QRAttendanceSession.objects.filter(faculty=request.user)
+        
+        # Filter by active status if requested
+        active_only = request.query_params.get('active_only', 'false').lower() == 'true'
+        if active_only:
+            sessions = sessions.filter(is_active=True, end_time__gt=timezone.now())
+        
+        serializer = QRAttendanceSessionSerializer(sessions, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        # Create new session
+        # Admin can create sessions on behalf of faculty
+        faculty_id = request.data.get('faculty_id')
+        if is_admin and faculty_id:
+            try:
+                target_faculty = User.objects.get(id=faculty_id, role='faculty')
+            except User.DoesNotExist:
+                return Response({"detail": "Faculty not found."}, status=404)
+        else:
+            target_faculty = request.user
+        
+        data = request.data
+        subject = data.get('subject')
+        year = data.get('year')
+        branch = data.get('branch')
+        sections = data.get('sections', [])
+        duration_minutes = data.get('duration_minutes', 10)
+        
+        if not all([subject, year, branch, sections]):
+            return Response({"detail": "Subject, year, branch, and sections are required."}, status=400)
+        
+        if isinstance(sections, str):
+            sections = [s.strip() for s in sections.split(',') if s.strip()]
+        
+        # Check if faculty is assigned to the specified department and sections
+        faculty_dept_sections = FacultyDepartmentSection.objects.filter(faculty=target_faculty)
+        if faculty_dept_sections.exists():
+            # Faculty has specific section assignments
+            allowed_sections = set()
+            for fds in faculty_dept_sections:
+                if fds.department.code == branch:
+                    allowed_sections.add(fds.section.name)
+            
+            if not allowed_sections:
+                return Response({"detail": "Faculty is not assigned to this department."}, status=403)
+            
+            # Check if all requested sections are allowed
+            for section in sections:
+                if section not in allowed_sections:
+                    return Response({"detail": f"Faculty is not assigned to section {section}."}, status=403)
+        else:
+            # Faculty has no specific section assignments, check department
+            if branch not in (target_faculty.department or '').split(','):
+                return Response({"detail": "Faculty is not assigned to this department."}, status=403)
+        
+        # Create session
+        start_time = timezone.now()
+        end_time = start_time + datetime.timedelta(minutes=duration_minutes)
+        token_expires_at = start_time + datetime.timedelta(seconds=5)  # Initial token expires in 5 seconds
+        
+        session = QRAttendanceSession.objects.create(
+            faculty=target_faculty,
+            subject=subject,
+            year=year,
+            branch=branch,
+            sections=','.join(sections),
+            duration_minutes=duration_minutes,
+            end_time=end_time,
+            current_qr_token=_generate_qr_token(),
+            token_expires_at=token_expires_at
+        )
+        
+        serializer = QRAttendanceSessionSerializer(session)
+        return Response(serializer.data, status=201)
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def qr_attendance_session_detail_view(request, session_id):
+    """Get, update, or delete a specific QR attendance session."""
+    try:
+        session = QRAttendanceSession.objects.get(id=session_id)
+    except QRAttendanceSession.DoesNotExist:
+        return Response({"detail": "Session not found."}, status=404)
+    
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    is_faculty = request.user.role == 'faculty'
+    
+    # Check permissions
+    if not is_admin and session.faculty != request.user:
+        return Response({"detail": "You can only access your own sessions."}, status=403)
+    
+    if request.method == 'GET':
+        # Refresh token if expired
+        if timezone.now() > session.token_expires_at and session.is_active:
+            session.current_qr_token = _generate_qr_token()
+            session.token_expires_at = timezone.now() + datetime.timedelta(seconds=session.token_refresh_interval)
+            session.save()
+        
+        serializer = QRAttendanceSessionSerializer(session)
+        response_data = serializer.data
+        
+        # Add QR code image
+        try:
+            response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token)
+        except Exception as e:
+            response_data['qr_code_image'] = None
+        
+        return Response(response_data)
+    
+    elif request.method == 'PATCH':
+        # Update session (e.g., close it)
+        if 'is_active' in request.data:
+            session.is_active = request.data['is_active']
+            session.save()
+        
+        serializer = QRAttendanceSessionSerializer(session)
+        return Response(serializer.data)
+    
+    elif request.method == 'DELETE':
+        # Delete session
+        session.delete()
+        return Response({"detail": "Session deleted."}, status=204)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def qr_attendance_mark_view(request):
+    """Mark attendance using QR code."""
+    session_id = request.data.get('session_id')
+    qr_token = request.data.get('qr_token')
+    device_id = request.data.get('device_id')
+    
+    if not all([session_id, qr_token, device_id]):
+        return Response({"detail": "Session ID, QR token, and device ID are required."}, status=400)
+    
+    # Only students can mark attendance
+    if request.user.role != 'student':
+        return Response({"detail": "Only students can mark attendance."}, status=403)
+    
+    try:
+        session = QRAttendanceSession.objects.get(id=session_id)
+    except QRAttendanceSession.DoesNotExist:
+        return Response({"detail": "Invalid session."}, status=404)
+    
+    # Check if session is active
+    if not session.is_active:
+        return Response({"detail": "Attendance session is closed."}, status=403)
+    
+    # Check if session has expired
+    if timezone.now() > session.end_time:
+        return Response({"detail": "Attendance session has expired."}, status=403)
+    
+    # Check if QR token is valid
+    if timezone.now() > session.token_expires_at:
+        return Response({"detail": "QR code has expired. Please scan the new one."}, status=403)
+    
+    if session.current_qr_token != qr_token:
+        return Response({"detail": "Invalid QR code."}, status=403)
+    
+    # Check if student belongs to the correct year, branch, and section
+    if request.user.year != session.year:
+        return Response({"detail": "You are not in the correct year for this session."}, status=403)
+    
+    if request.user.department != session.branch:
+        return Response({"detail": "You are not in the correct branch for this session."}, status=403)
+    
+    session_sections = [s.strip() for s in session.sections.split(',') if s.strip()]
+    student_sections = request.user.sections or ([request.user.section] if request.user.section else [])
+    
+    # Check if student is in any of the allowed sections
+    if not any(section in session_sections for section in student_sections):
+        return Response({"detail": "You are not in the correct section for this session."}, status=403)
+    
+    # Check if student already marked attendance for this session
+    if QRAttendanceRecord.objects.filter(session=session, student=request.user).exists():
+        return Response({"detail": "You have already marked attendance for this session."}, status=403)
+    
+    # Check if device is already used for this session
+    hashed_device_id = _hash_device_id(device_id)
+    if QRAttendanceRecord.objects.filter(session=session, device_id=hashed_device_id).exists():
+        return Response({"detail": "This device has already been used for this session."}, status=403)
+    
+    # Create attendance record
+    record = QRAttendanceRecord.objects.create(
+        session=session,
+        student=request.user,
+        device_id=hashed_device_id
+    )
+    
+    # Also create regular attendance record
+    today = timezone.now().date()
+    existing_attendance = Attendance.objects.filter(
+        student=request.user,
+        subject=session.subject,
+        date=today
+    ).first()
+    
+    if existing_attendance:
+        # Update existing record
+        existing_attendance.status = 'present'
+        existing_attendance.hours = 1
+        existing_attendance.total_hours = 1
+        existing_attendance.save()
+    else:
+        # Create new record
+        Attendance.objects.create(
+            student=request.user,
+            subject=session.subject,
+            date=today,
+            status='present',
+            hours=1,
+            total_hours=1
+        )
+    
+    serializer = QRAttendanceRecordSerializer(record)
+    return Response({
+        "detail": "Attendance marked successfully.",
+        "record": serializer.data
+    }, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def qr_attendance_records_view(request, session_id):
+    """Get attendance records for a specific session."""
+    try:
+        session = QRAttendanceSession.objects.get(id=session_id)
+    except QRAttendanceSession.DoesNotExist:
+        return Response({"detail": "Session not found."}, status=404)
+    
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    is_faculty = request.user.role == 'faculty'
+    
+    # Check permissions
+    if not is_admin and session.faculty != request.user:
+        return Response({"detail": "You can only view records for your own sessions."}, status=403)
+    
+    records = QRAttendanceRecord.objects.filter(session=session).select_related('student')
+    serializer = QRAttendanceRecordSerializer(records, many=True)
+    return Response(serializer.data)

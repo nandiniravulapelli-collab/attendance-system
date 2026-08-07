@@ -106,3 +106,42 @@ class FacultyDepartmentSection(models.Model):
 
     def __str__(self):
         return f"{self.faculty.username} - {self.department.code} - {self.section.name}"
+
+
+class QRAttendanceSession(models.Model):
+    """Model to store QR attendance session information."""
+    faculty = models.ForeignKey(User, on_delete=models.CASCADE, related_name='qr_attendance_sessions')
+    subject = models.CharField(max_length=100)
+    year = models.CharField(max_length=20)
+    branch = models.CharField(max_length=100)
+    sections = models.CharField(max_length=500, help_text='Comma-separated section names')
+    duration_minutes = models.IntegerField()
+    start_time = models.DateTimeField(auto_now_add=True)
+    end_time = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+    current_qr_token = models.CharField(max_length=100, unique=True)
+    token_expires_at = models.DateTimeField()
+    token_refresh_interval = models.IntegerField(default=5, help_text='Token refresh interval in seconds')
+
+    class Meta:
+        verbose_name = 'QR Attendance Session'
+        verbose_name_plural = 'QR Attendance Sessions'
+
+    def __str__(self):
+        return f"{self.faculty.username} - {self.subject} - {self.start_time}"
+
+
+class QRAttendanceRecord(models.Model):
+    """Model to store individual QR attendance records."""
+    session = models.ForeignKey(QRAttendanceSession, on_delete=models.CASCADE, related_name='attendance_records')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='qr_attendance_records')
+    device_id = models.CharField(max_length=255, help_text='Unique identifier for the device used')
+    scanned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [['session', 'student'], ['session', 'device_id']]
+        verbose_name = 'QR Attendance Record'
+        verbose_name_plural = 'QR Attendance Records'
+
+    def __str__(self):
+        return f"{self.student.username} - {self.session.subject} - {self.scanned_at}"

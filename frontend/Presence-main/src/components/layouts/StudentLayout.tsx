@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
+import { QRCodeSVG } from 'react-qr-code';
 import {
   PieChart,
   Pie,
@@ -36,7 +37,9 @@ import {
   Clock,
   Edit,
   Save,
-  Lock
+  Lock,
+  Scan,
+  Camera
 } from 'lucide-react';
 import { db } from '@/lib/mockDb';
 import { toast } from '@/hooks/use-toast';
@@ -72,6 +75,14 @@ export const StudentLayout: React.FC = () => {
   const [changePasswordForm, setChangePasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
   const [apiDepartments, setApiDepartments] = useState<Array<{ id: number; name: string; code: string }>>([]);
   const [apiSections, setApiSections] = useState<Array<{ id: number; name: string }>>([]);
+
+  /** QR Attendance state for students */
+  const [qrScanningOpen, setQrScanningOpen] = useState(false);
+  const [qrSessionId, setQrSessionId] = useState('');
+  const [qrToken, setQrToken] = useState('');
+  const [deviceId, setDeviceId] = useState('');
+  const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   const numericId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
   useEffect(() => {
@@ -382,6 +393,74 @@ export const StudentLayout: React.FC = () => {
     ? completeAttendanceFilteredBySubject
     : completeAttendanceFilteredBySubject.slice(0, 10);
 
+  // QR Attendance Handlers
+  const handleQrMarkAttendance = async () => {
+    if (!qrSessionId || !qrToken) {
+      toast({ title: 'Validation Error', description: 'Please enter session ID and QR token.', variant: 'destructive' });
+      return;
+    }
+
+    // Generate device ID if not provided
+    const finalDeviceId = deviceId || `${user?.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    setDeviceId(finalDeviceId);
+
+    setIsScanning(true);
+    setScanResult(null);
+
+    try {
+      const res = await fetch(apiUrl('/api/qr-attendance/mark/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          session_id: qrSessionId,
+          qr_token: qrToken,
+          device_id: finalDeviceId
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setScanResult({
+          success: true,
+          message: data.detail || 'Attendance marked successfully!'
+        });
+        toast({ title: 'Success', description: 'Your attendance has been marked.' });
+        setTimeout(() => {
+          setQrScanningOpen(false);
+          setScanResult(null);
+          setQrSessionId('');
+          setQrToken('');
+        }, 2000);
+      } else {
+        setScanResult({
+          success: false,
+          message: data.detail || 'Failed to mark attendance.'
+        });
+      }
+    } catch (error) {
+      setScanResult({
+        success: false,
+        message: 'Network error. Please try again.'
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  // Generate device ID on mount
+  useEffect(() => {
+    const storedDeviceId = localStorage.getItem('qr_device_id');
+    if (storedDeviceId) {
+      setDeviceId(storedDeviceId);
+    } else {
+      const newDeviceId = `${user?.id || 'unknown'}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      setDeviceId(newDeviceId);
+      localStorage.setItem('qr_device_id', newDeviceId);
+    }
+  }, [user?.id]);
+
   return (
     <div className="min-h-screen bg-dashboard-bg">
       {/* Header */}
@@ -410,6 +489,7 @@ export const StudentLayout: React.FC = () => {
           <TabsList className="mb-6 flex flex-wrap gap-1.5 h-auto p-1.5 rounded-xl bg-muted/80">
             <TabsTrigger value="dashboard" disabled={isStudentAttendanceFrozen}>Dashboard</TabsTrigger>
             <TabsTrigger value="attendance" disabled={isStudentAttendanceFrozen}>My Attendance</TabsTrigger>
+            <TabsTrigger value="qr-attendance" disabled={isStudentAttendanceFrozen}>QR Attendance</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
@@ -836,6 +916,30 @@ export const StudentLayout: React.FC = () => {
             </Card>
           </TabsContent>
 
+          {/* QR Attendance Tab */}
+          <TabsContent value="qr-attendance" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>QR Attendance</CardTitle>
+                <CardDescription>Scan QR codes to mark your attendance quickly</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-center py-8">
+                  <div className="mb-4">
+                    <Camera className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                  </div>
+                  <p className="text-muted-foreground mb-4">
+                    When your faculty displays a QR code, scan it to mark your attendance automatically
+                  </p>
+                  <Button onClick={() => setQrScanningOpen(true)} size="lg">
+                    <Scan className="w-4 h-4 mr-2" />
+                    Scan QR Code
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Subjects Tab */}
           <TabsContent value="subjects">
             <Card>
@@ -1052,6 +1156,81 @@ export const StudentLayout: React.FC = () => {
               </DialogContent>
             </Dialog>
           </TabsContent>
+
+          {/* QR Scanning Dialog */}
+          <Dialog open={qrScanningOpen} onOpenChange={setQrScanningOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Scan QR Code</DialogTitle>
+                <DialogDescription>Position the QR code within the camera frame to mark attendance</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="bg-black rounded-lg aspect-square flex items-center justify-center overflow-hidden relative">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center text-white">
+                      <Camera className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm opacity-50">Camera access required</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-session-id">Or enter Session ID manually</Label>
+                  <Input
+                    id="manual-session-id"
+                    value={qrSessionId}
+                    onChange={(e) => setQrSessionId(e.target.value)}
+                    placeholder="Enter session ID from faculty screen"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-token">QR Token</Label>
+                  <Input
+                    id="manual-token"
+                    value={qrToken}
+                    onChange={(e) => setQrToken(e.target.value)}
+                    placeholder="Enter QR token if manual entry"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="device-id">Device ID</Label>
+                  <Input
+                    id="device-id"
+                    value={deviceId}
+                    onChange={(e) => setDeviceId(e.target.value)}
+                    placeholder="Auto-generated for your device"
+                    disabled
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This identifies your device for this session only
+                  </p>
+                </div>
+                {scanResult && (
+                  <Alert variant={scanResult.success ? 'default' : 'destructive'}>
+                    {scanResult.success ? (
+                      <CheckCircle className="h-4 w-4" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    <AlertTitle>{scanResult.success ? 'Success' : 'Error'}</AlertTitle>
+                    <AlertDescription>{scanResult.message}</AlertDescription>
+                  </Alert>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setQrScanningOpen(false);
+                  setScanResult(null);
+                  setQrSessionId('');
+                  setQrToken('');
+                }}>
+                  Cancel
+                </Button>
+                <Button onClick={handleQrMarkAttendance} disabled={isScanning || (!qrSessionId || !qrToken)}>
+                  {isScanning ? 'Marking...' : 'Mark Attendance'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </Tabs>
       </div>
     </div>
