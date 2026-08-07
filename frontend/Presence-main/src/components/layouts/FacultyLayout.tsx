@@ -41,6 +41,7 @@ import {
   FileDown,
   Edit,
   UserCircle,
+  Plus,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -65,10 +66,10 @@ const SAT_YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
 
 type FacultyDefaulterStudent = {
   id: number;
-  full_name?: string | null;
-  roll_number?: string | null;
+  full_name: string | null;
+  roll_number: string | null;
   username?: string;
-  department?: string | null;
+  department: string | null;
   year?: string | null;
   section?: string | null;
   sections?: string[];
@@ -171,7 +172,7 @@ export const FacultyLayout: React.FC = () => {
   }>>([]);
   const [activeQrSession, setActiveQrSession] = useState<any>(null);
   const [qrCodeImage, setQrCodeImage] = useState<string | null>(null);
-  const [qrRefreshInterval, setQrRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [qrRefreshInterval, setQrRefreshInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [qrSessionForm, setQrSessionForm] = useState({
     subject: '',
     year: '1',
@@ -393,7 +394,7 @@ export const FacultyLayout: React.FC = () => {
       .filter(s => {
         // If faculty has specific section assignments, filter by those
         if (facultyDeptSections.length > 0) {
-          const studentSections = s.sections || (s.section ? [s.section] : []);
+          const studentSections = s.section ? [s.section] : [];
           return facultyDeptSections.some((fds: { department_code: string; section_name: string }) => {
             return fds.department_code === s.departmentId && studentSections.includes(fds.section_name);
           });
@@ -924,7 +925,7 @@ export const FacultyLayout: React.FC = () => {
           // Check if student is in faculty's assigned sections (if any)
           const facultyDeptSections = user?.faculty_department_sections || [];
           if (facultyDeptSections.length > 0) {
-            const studentSections = s.sections || (s.section ? [s.section] : []);
+            const studentSections = s.section ? [s.section] : [];
             return facultyDeptSections.some((fds: { department_code: string; section_name: string }) => {
               return fds.department_code === s.department && studentSections.includes(fds.section_name);
             });
