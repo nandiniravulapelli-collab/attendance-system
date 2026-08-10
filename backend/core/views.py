@@ -2156,7 +2156,7 @@ def qr_attendance_session_detail_view(request, session_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def qr_attendance_mark_view(request):
-    """Mark attendance using QR code."""
+    """Mark attendance using QR code or manual entry."""
     qr_data = request.data.get('qr_data')  # Combined session_id:token from QR scan
     device_id = request.data.get('device_id')
     
@@ -2174,8 +2174,8 @@ def qr_attendance_mark_view(request):
         except:
             return Response({"detail": "Invalid QR code format."}, status=400)
     
-    if not all([session_id, qr_token, device_id]):
-        return Response({"detail": "Session ID, QR token, and device ID are required."}, status=400)
+    if not all([session_id, device_id]):
+        return Response({"detail": "Session ID and device ID are required."}, status=400)
     
     # Only students can mark attendance
     if request.user.role != 'student':
@@ -2194,12 +2194,14 @@ def qr_attendance_mark_view(request):
     if timezone.now() > session.end_time:
         return Response({"detail": "Attendance session has expired."}, status=403)
     
-    # Check if QR token is valid
-    if timezone.now() > session.token_expires_at:
-        return Response({"detail": "QR code has expired. Please scan the new one."}, status=403)
-    
-    if session.current_qr_token != qr_token:
-        return Response({"detail": "Invalid QR code."}, status=403)
+    # QR token validation is optional now - if provided, validate it
+    if qr_token:
+        # Check if QR token is valid
+        if timezone.now() > session.token_expires_at:
+            return Response({"detail": "QR code has expired. Please scan the new one."}, status=403)
+        
+        if session.current_qr_token != qr_token:
+            return Response({"detail": "Invalid QR code."}, status=403)
     
     # Check if student belongs to the correct year, branch, and section
     if request.user.year != session.year:

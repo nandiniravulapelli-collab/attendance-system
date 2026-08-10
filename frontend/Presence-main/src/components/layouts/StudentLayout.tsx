@@ -80,7 +80,6 @@ export const StudentLayout: React.FC = () => {
   /** QR Attendance state for students */
   const [qrScanningOpen, setQrScanningOpen] = useState(false);
   const [qrSessionId, setQrSessionId] = useState('');
-  const [qrToken, setQrToken] = useState('');
   const [deviceId, setDeviceId] = useState('');
   const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -399,10 +398,10 @@ export const StudentLayout: React.FC = () => {
   // QR Attendance Handlers
   const handleQrMarkAttendance = async (qrData?: string) => {
     // If QR data is provided (from scan), use it; otherwise use manual entry
-    const sessionInfo = qrData || `${qrSessionId}:${qrToken}`;
+    const sessionInfo = qrData || `${qrSessionId}`;
     
-    if (!sessionInfo || sessionInfo.split(':').length !== 2) {
-      toast({ title: 'Validation Error', description: 'Please scan a valid QR code or enter session details.', variant: 'destructive' });
+    if (!sessionInfo) {
+      toast({ title: 'Validation Error', description: 'Please scan a valid QR code or enter session ID.', variant: 'destructive' });
       return;
     }
 
@@ -419,7 +418,7 @@ export const StudentLayout: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          qr_data: sessionInfo,
+          session_id: sessionInfo,
           device_id: finalDeviceId
         })
       });
@@ -432,12 +431,8 @@ export const StudentLayout: React.FC = () => {
           message: data.detail || 'Attendance marked successfully!'
         });
         toast({ title: 'Success', description: 'Your attendance has been marked.' });
-        setTimeout(() => {
-          setQrScanningOpen(false);
-          setScanResult(null);
-          setQrSessionId('');
-          setQrToken('');
-        }, 2000);
+        setQrScanningOpen(false);
+        setQrSessionId('');
       } else {
         setScanResult({
           success: false,
@@ -458,7 +453,9 @@ export const StudentLayout: React.FC = () => {
   const handleQrScan = (result: any) => {
     if (result) {
       const qrData = result.text || result;
-      handleQrMarkAttendance(qrData);
+      // Parse the QR data to extract session ID
+      const sessionId = qrData.split(':')[0]; // Extract session ID from "session_id:token"
+      handleQrMarkAttendance(sessionId);
     }
   };
 
@@ -1209,14 +1206,11 @@ export const StudentLayout: React.FC = () => {
                         <QrScanner
                           onResult={handleQrScan}
                           onError={handleQrError}
-                          style={{ width: '100%', height: '100%' }}
                           constraints={{
                             facingMode: 'environment'
                           }}
-                          components={{
-                            audio: false,
-                            video: true
-                          }}
+                          containerStyle={{ width: '100%', height: '100%' }}
+                          videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       ) : (
                         <div className="text-center text-white p-4">
@@ -1250,15 +1244,6 @@ export const StudentLayout: React.FC = () => {
                         value={qrSessionId}
                         onChange={(e) => setQrSessionId(e.target.value)}
                         placeholder="Enter session ID from faculty screen"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="manual-token">QR Token</Label>
-                      <Input
-                        id="manual-token"
-                        value={qrToken}
-                        onChange={(e) => setQrToken(e.target.value)}
-                        placeholder="Enter QR token if manual entry"
                       />
                     </div>
                     <div className="space-y-2">
@@ -1302,7 +1287,7 @@ export const StudentLayout: React.FC = () => {
                 
                 <Button 
                   onClick={() => handleQrMarkAttendance()} 
-                  disabled={isScanning || (!qrSessionId || !qrToken)}
+                  disabled={isScanning || !qrSessionId}
                   className="w-full"
                 >
                   {isScanning ? 'Processing...' : 'Mark Attendance'}

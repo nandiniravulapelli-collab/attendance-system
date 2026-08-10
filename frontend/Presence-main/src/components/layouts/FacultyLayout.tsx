@@ -163,7 +163,7 @@ export const FacultyLayout: React.FC = () => {
     year: string;
     branch: string;
     sections: string;
-    duration_minutes: number;
+    duration_hours: number;
     start_time: string;
     end_time: string;
     is_active: boolean;
@@ -178,7 +178,7 @@ export const FacultyLayout: React.FC = () => {
     year: '1',
     branch: '',
     sections: [] as string[],
-    duration_minutes: 10
+    duration_hours: 1
   });
   const [qrSessionDialogOpen, setQrSessionDialogOpen] = useState(false);
   const [qrAttendanceRecords, setQrAttendanceRecords] = useState<Array<any>>([]);
@@ -995,7 +995,7 @@ export const FacultyLayout: React.FC = () => {
           year: qrSessionForm.year,
           branch: qrSessionForm.branch,
           sections: qrSessionForm.sections,
-          duration_minutes: qrSessionForm.duration_minutes
+          duration_minutes: qrSessionForm.duration_hours * 60
         })
       });
 
@@ -1007,7 +1007,7 @@ export const FacultyLayout: React.FC = () => {
           year: '1',
           branch: '',
           sections: [],
-          duration_minutes: 10
+          duration_hours: 1
         });
         handleActivateQrSession(session.id);
         toast({ title: 'Session Started', description: 'QR attendance session is now active.' });
@@ -1800,7 +1800,7 @@ export const FacultyLayout: React.FC = () => {
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Duration:</span>
-                              <span className="font-medium">{activeQrSession.duration_minutes} minutes</span>
+                              <span className="font-medium">{activeQrSession.duration_hours} hour(s)</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Attendance Count:</span>
@@ -1857,7 +1857,7 @@ export const FacultyLayout: React.FC = () => {
                               <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Branch</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Sections</th>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Duration</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Duration (hours)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Attendance</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Status</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Actions</th>
@@ -1871,7 +1871,7 @@ export const FacultyLayout: React.FC = () => {
                                 <td className="px-4 py-2 text-sm">{session.year}</td>
                                 <td className="px-4 py-2 text-sm">{session.branch}</td>
                                 <td className="px-4 py-2 text-sm">{session.sections}</td>
-                                <td className="px-4 py-2 text-sm">{session.duration_minutes} min</td>
+                                <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
                                 <td className="px-4 py-2 text-sm">{session.attendance_count}</td>
                                 <td className="px-4 py-2 text-sm">
                                   <Badge variant={session.is_active ? 'default' : 'secondary'}>
@@ -2532,14 +2532,15 @@ export const FacultyLayout: React.FC = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="qr-duration">Duration (minutes) *</Label>
+                  <Label htmlFor="qr-duration">Duration (hours) *</Label>
                   <Input
                     id="qr-duration"
                     type="number"
                     min="1"
-                    max="60"
-                    value={qrSessionForm.duration_minutes}
-                    onChange={(e) => setQrSessionForm({...qrSessionForm, duration_minutes: parseInt(e.target.value) || 10})}
+                    max="24"
+                    step="0.5"
+                    value={qrSessionForm.duration_hours}
+                    onChange={(e) => setQrSessionForm({...qrSessionForm, duration_hours: parseFloat(e.target.value) || 1})}
                   />
                 </div>
               </div>

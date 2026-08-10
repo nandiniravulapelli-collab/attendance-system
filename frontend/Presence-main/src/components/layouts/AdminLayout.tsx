@@ -184,7 +184,7 @@ export const AdminLayout: React.FC = () => {
     year: '1',
     branch: '',
     sections: [] as string[],
-    duration_minutes: 10,
+    duration_hours: 1,
     faculty_id: ''
   });
   const [adminQrSessionDialogOpen, setAdminQrSessionDialogOpen] = useState(false);
@@ -1844,7 +1844,7 @@ export const AdminLayout: React.FC = () => {
           year: adminQrSessionForm.year,
           branch: adminQrSessionForm.branch,
           sections: adminQrSessionForm.sections,
-          duration_minutes: adminQrSessionForm.duration_minutes
+          duration_minutes: adminQrSessionForm.duration_hours * 60
         })
       });
 
@@ -1856,7 +1856,7 @@ export const AdminLayout: React.FC = () => {
           year: '1',
           branch: '',
           sections: [],
-          duration_minutes: 10,
+          duration_hours: 1,
           faculty_id: ''
         });
         handleAdminActivateQrSession(session.id);
@@ -3754,7 +3754,7 @@ export const AdminLayout: React.FC = () => {
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Duration:</span>
-                              <span className="font-medium">{adminActiveQrSession.duration_minutes} minutes</span>
+                              <span className="font-medium">{adminActiveQrSession.duration_hours} hour(s)</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Attendance Count:</span>
@@ -3811,7 +3811,7 @@ export const AdminLayout: React.FC = () => {
                               <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Branch</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Sections</th>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Duration</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Duration (hours)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Attendance</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Status</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Actions</th>
@@ -3825,7 +3825,7 @@ export const AdminLayout: React.FC = () => {
                                 <td className="px-4 py-2 text-sm">{session.year}</td>
                                 <td className="px-4 py-2 text-sm">{session.branch}</td>
                                 <td className="px-4 py-2 text-sm">{session.sections}</td>
-                                <td className="px-4 py-2 text-sm">{session.duration_minutes} min</td>
+                                <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
                                 <td className="px-4 py-2 text-sm">{session.attendance_count}</td>
                                 <td className="px-4 py-2 text-sm">
                                   <Badge variant={session.is_active ? 'default' : 'secondary'}>
@@ -5136,14 +5136,15 @@ export const AdminLayout: React.FC = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="admin-qr-duration">Duration (minutes) *</Label>
+                  <Label htmlFor="admin-qr-duration">Duration (hours) *</Label>
                   <Input
                     id="admin-qr-duration"
                     type="number"
                     min="1"
-                    max="60"
-                    value={adminQrSessionForm.duration_minutes}
-                    onChange={(e) => setAdminQrSessionForm({...adminQrSessionForm, duration_minutes: parseInt(e.target.value) || 10})}
+                    max="24"
+                    step="0.5"
+                    value={adminQrSessionForm.duration_hours}
+                    onChange={(e) => setAdminQrSessionForm({...adminQrSessionForm, duration_hours: parseFloat(e.target.value) || 1})}
                   />
                 </div>
               </div>
