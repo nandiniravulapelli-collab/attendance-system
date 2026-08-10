@@ -2217,7 +2217,13 @@ def qr_attendance_mark_view(request):
         return Response({"detail": "You are not in the correct branch for this session."}, status=403)
     
     session_sections = [s.strip() for s in session.sections.split(',') if s.strip()]
-    student_sections = request.user.sections or ([request.user.section] if request.user.section else [])
+    # Handle both old and new user models
+    if hasattr(request.user, 'sections') and request.user.sections:
+        student_sections = request.user.sections
+    elif hasattr(request.user, 'section') and request.user.section:
+        student_sections = [request.user.section]
+    else:
+        student_sections = []
     
     # Check if student is in any of the allowed sections
     if not any(section in session_sections for section in student_sections):

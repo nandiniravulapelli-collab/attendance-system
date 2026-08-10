@@ -459,8 +459,15 @@ export const StudentLayout: React.FC = () => {
       try {
         const text = await res.text();
         console.log('Response text:', text);
-        data = JSON.parse(text);
-        console.log('Parsed response data:', data);
+        
+        // Check if response is HTML (error page) instead of JSON
+        if (text.trim().startsWith('<')) {
+          console.error('Received HTML instead of JSON, likely server error');
+          data = { detail: 'Server error. Please contact administrator.' };
+        } else {
+          data = JSON.parse(text);
+          console.log('Parsed response data:', data);
+        }
       } catch (e) {
         console.error('Failed to parse JSON response:', e);
         data = { detail: 'Invalid response from server' };
@@ -1256,7 +1263,8 @@ export const StudentLayout: React.FC = () => {
                             onResult={handleQrScan}
                             onError={handleQrError}
                             constraints={{
-                              facingMode: 'environment'
+                              audio: false,
+                              video: { facingMode: 'environment' }
                             }}
                             videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             containerStyle={{ width: '100%', height: '100%' }}
