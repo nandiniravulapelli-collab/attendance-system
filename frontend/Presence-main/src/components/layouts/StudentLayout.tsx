@@ -506,10 +506,13 @@ export const StudentLayout: React.FC = () => {
   };
 
   const handleQrScan = (result: any) => {
+    console.log('QR Scan result:', result);
     if (result) {
       const qrData = result.text || result;
+      console.log('QR Data:', qrData);
       // Parse the QR data to extract session ID
       const sessionId = qrData.split(':')[0]; // Extract session ID from "session_id:token"
+      console.log('Extracted session ID:', sessionId);
       handleQrMarkAttendance(sessionId);
     }
   };
@@ -1262,9 +1265,11 @@ export const StudentLayout: React.FC = () => {
                           <QrScanner
                             onResult={handleQrScan}
                             onError={handleQrError}
+                            scanDelay={500}
                             constraints={{
-                              audio: false,
-                              video: { facingMode: 'environment' }
+                              video: {
+                                facingMode: { ideal: 'environment' }
+                              }
                             }}
                             videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             containerStyle={{ width: '100%', height: '100%' }}

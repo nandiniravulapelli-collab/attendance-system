@@ -113,7 +113,8 @@ class QRAttendanceSession(models.Model):
     faculty = models.ForeignKey(User, on_delete=models.CASCADE, related_name='qr_attendance_sessions')
     subject = models.CharField(max_length=100)
     year = models.CharField(max_length=20)
-    branch = models.CharField(max_length=100)
+    branch = models.CharField(max_length=100, default='', blank=True)  # Keep for backward compatibility
+    branches = models.CharField(max_length=500, default='', blank=True, help_text='Comma-separated branch codes')
     sections = models.CharField(max_length=500, help_text='Comma-separated section names')
     duration_minutes = models.IntegerField()
     start_time = models.DateTimeField(auto_now_add=True)

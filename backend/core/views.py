@@ -2052,36 +2052,49 @@ def qr_attendance_sessions_view(request):
         data = request.data
         subject = data.get('subject')
         year = data.get('year')
-        branch = data.get('branch')
+        branch = data.get('branch')  # Single branch (backward compatibility)
+        branches = data.get('branches', [])  # Multiple branches (new)
         sections = data.get('sections', [])
         duration_minutes = data.get('duration_minutes', 10)
         
-        if not all([subject, year, branch, sections]):
-            return Response({"detail": "Subject, year, branch, and sections are required."}, status=400)
+        # Handle both single branch and multiple branches
+        if branches and isinstance(branches, list):
+            # Use multiple branches
+            final_branches = branches
+        elif branch:
+            # Use single branch for backward compatibility
+            final_branches = [branch]
+        else:
+            return Response({"detail": "Branch or branches are required."}, status=400)
+        
+        if not all([subject, year, final_branches, sections]):
+            return Response({"detail": "Subject, year, branch(es), and sections are required."}, status=400)
         
         if isinstance(sections, str):
             sections = [s.strip() for s in sections.split(',') if s.strip()]
         
-        # Check if faculty is assigned to the specified department and sections
+        # Check if faculty is assigned to the specified departments and sections
         faculty_dept_sections = FacultyDepartmentSection.objects.filter(faculty=target_faculty)
         if faculty_dept_sections.exists():
             # Faculty has specific section assignments
             allowed_sections = set()
             for fds in faculty_dept_sections:
-                if fds.department.code == branch:
+                if fds.department.code in final_branches:
                     allowed_sections.add(fds.section.name)
             
             if not allowed_sections:
-                return Response({"detail": "Faculty is not assigned to this department."}, status=403)
+                return Response({"detail": "Faculty is not assigned to any of these departments."}, status=403)
             
             # Check if all requested sections are allowed
             for section in sections:
                 if section not in allowed_sections:
                     return Response({"detail": f"Faculty is not assigned to section {section}."}, status=403)
         else:
-            # Faculty has no specific section assignments, check department
-            if branch not in (target_faculty.department or '').split(','):
-                return Response({"detail": "Faculty is not assigned to this department."}, status=403)
+            # Faculty has no specific section assignments, check departments
+            faculty_depts = (target_faculty.department or '').split(',')
+            for requested_branch in final_branches:
+                if requested_branch not in faculty_depts:
+                    return Response({"detail": f"Faculty is not assigned to department {requested_branch}."}, status=403)
         
         # Create session
         start_time = timezone.now()
@@ -2092,7 +2105,8 @@ def qr_attendance_sessions_view(request):
             faculty=target_faculty,
             subject=subject,
             year=year,
-            branch=branch,
+            branch=final_branches[0] if final_branches else '',  # Keep first branch for backward compatibility
+            branches=','.join(final_branches),
             sections=','.join(sections),
             duration_minutes=duration_minutes,
             end_time=end_time,
@@ -2213,7 +2227,9 @@ def qr_attendance_mark_view(request):
     if request.user.year != session.year:
         return Response({"detail": "You are not in the correct year for this session."}, status=403)
     
-    if request.user.department != session.branch:
+    # Check if student belongs to any of the allowed branches
+    session_branches = [b.strip() for b in session.branches.split(',') if b.strip()] if session.branches else [session.branch]
+    if request.user.department not in session_branches:
         return Response({"detail": "You are not in the correct branch for this session."}, status=403)
     
     session_sections = [s.strip() for s in session.sections.split(',') if s.strip()]
@@ -2275,6 +2291,26 @@ def qr_attendance_mark_view(request):
         "detail": "Attendance marked successfully.",
         "record": serializer.data
     }, status=201)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def qr_attendance_session_delete_view(request, session_id):
+    """Delete a QR attendance session."""
+    try:
+        session = QRAttendanceSession.objects.get(id=session_id)
+    except QRAttendanceSession.DoesNotExist:
+        return Response({"detail": "Session not found."}, status=404)
+    
+    is_admin = request.user.role == 'admin' or request.user.is_superuser
+    is_faculty = request.user.role == 'faculty'
+    
+    # Check permissions
+    if not is_admin and session.faculty != request.user:
+        return Response({"detail": "You don't have permission to delete this session."}, status=403)
+    
+    session.delete()
+    return Response({"detail": "Session deleted successfully."}, status=200)
 
 
 @api_view(['GET'])

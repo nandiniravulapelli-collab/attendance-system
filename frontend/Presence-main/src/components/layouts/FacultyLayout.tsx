@@ -176,7 +176,7 @@ export const FacultyLayout: React.FC = () => {
   const [qrSessionForm, setQrSessionForm] = useState({
     subject: '',
     year: '1',
-    branch: '',
+    branches: [] as string[],
     sections: [] as string[],
     duration_hours: 1
   });
@@ -993,7 +993,7 @@ export const FacultyLayout: React.FC = () => {
         body: JSON.stringify({
           subject: qrSessionForm.subject,
           year: qrSessionForm.year,
-          branch: qrSessionForm.branch,
+          branches: qrSessionForm.branches,
           sections: qrSessionForm.sections,
           duration_minutes: qrSessionForm.duration_hours * 60
         })
@@ -1005,7 +1005,7 @@ export const FacultyLayout: React.FC = () => {
         setQrSessionForm({
           subject: '',
           year: '1',
-          branch: '',
+          branches: [],
           sections: [],
           duration_hours: 1
         });
@@ -1014,6 +1014,33 @@ export const FacultyLayout: React.FC = () => {
       } else {
         const err = await res.json().catch(() => ({}));
         toast({ title: 'Error', description: err.detail || 'Failed to start session.', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteQrSession = async (sessionId: number) => {
+    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/delete/`), {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (res.ok) {
+        toast({ title: 'Success', description: 'Session deleted successfully.' });
+        loadQrSessions();
+        if (activeQrSession?.id === sessionId) {
+          setActiveQrSession(null);
+          setQrCodeImage(null);
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: 'Error', description: err.detail || 'Failed to delete session.', variant: 'destructive' });
       }
     } catch (error) {
       toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
@@ -1791,8 +1818,8 @@ export const FacultyLayout: React.FC = () => {
                               <span className="font-medium">{activeQrSession.year}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-sm text-muted-foreground">Branch:</span>
-                              <span className="font-medium">{activeQrSession.branch}</span>
+                              <span className="text-sm text-muted-foreground">Branch(es):</span>
+                              <span className="font-medium">{activeQrSession.branches || activeQrSession.branch}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Sections:</span>
@@ -1855,7 +1882,7 @@ export const FacultyLayout: React.FC = () => {
                               <th className="px-4 py-2 text-left text-sm font-medium">Session ID</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Subject</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Branch</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Branch(es)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Sections</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Duration (hours)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Attendance</th>
@@ -1869,7 +1896,7 @@ export const FacultyLayout: React.FC = () => {
                                 <td className="px-4 py-2 text-sm font-medium text-blue-600">{session.id}</td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.year}</td>
-                                <td className="px-4 py-2 text-sm">{session.branch}</td>
+                                <td className="px-4 py-2 text-sm">{session.branches || session.branch}</td>
                                 <td className="px-4 py-2 text-sm">{session.sections}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
                                 <td className="px-4 py-2 text-sm">{session.attendance_count}</td>
@@ -1879,15 +1906,24 @@ export const FacultyLayout: React.FC = () => {
                                   </Badge>
                                 </td>
                                 <td className="px-4 py-2 text-sm">
-                                  {session.is_active && (
+                                  <div className="flex gap-2">
+                                    {session.is_active && (
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => handleActivateQrSession(session.id)}
+                                      >
+                                        View
+                                      </Button>
+                                    )}
                                     <Button 
-                                      variant="outline" 
+                                      variant="destructive" 
                                       size="sm"
-                                      onClick={() => handleActivateQrSession(session.id)}
+                                      onClick={() => handleDeleteQrSession(session.id)}
                                     >
-                                      View
+                                      Delete
                                     </Button>
-                                  )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -2495,19 +2531,26 @@ export const FacultyLayout: React.FC = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="qr-branch">Branch *</Label>
-                  <Select value={qrSessionForm.branch} onValueChange={(value) => setQrSessionForm({...qrSessionForm, branch: value})}>
-                    <SelectTrigger id="qr-branch">
-                      <SelectValue placeholder="Select branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {facultyBranchOptions.map((dept) => (
-                        <SelectItem key={dept.code} value={dept.code}>
+                  <Label htmlFor="qr-branches">Branches *</Label>
+                  <div className="border rounded-lg p-3 max-h-32 overflow-y-auto">
+                    {facultyBranchOptions.map((dept) => (
+                      <div key={dept.code} className="flex items-center space-x-2 mb-2">
+                        <Checkbox
+                          id={`qr-branch-${dept.code}`}
+                          checked={qrSessionForm.branches.includes(dept.code)}
+                          onCheckedChange={(checked) => {
+                            const next = checked
+                              ? [...qrSessionForm.branches, dept.code]
+                              : qrSessionForm.branches.filter(b => b !== dept.code);
+                            setQrSessionForm({...qrSessionForm, branches: next});
+                          }}
+                        />
+                        <label htmlFor={`qr-branch-${dept.code}`} className="text-sm cursor-pointer">
                           {dept.code} - {dept.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="qr-sections">Sections *</Label>
