@@ -1821,7 +1821,7 @@ export const AdminLayout: React.FC = () => {
 
   // Admin QR Attendance Handlers
   const handleAdminStartQrSession = async () => {
-    if (!adminQrSessionForm.faculty_id || !adminQrSessionForm.subject || adminQrSessionForm.branches.length === 0 || adminQrSessionForm.sections.length === 0) {
+    if (!adminQrSessionForm.faculty_id || !adminQrSessionForm.subject || !adminQrSessionForm.branch || adminQrSessionForm.sections.length === 0) {
       toast({ title: 'Validation Error', description: 'Please fill in all required fields.', variant: 'destructive' });
       return;
     }

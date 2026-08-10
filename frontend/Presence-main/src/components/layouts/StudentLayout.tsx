@@ -1289,10 +1289,6 @@ export const StudentLayout: React.FC = () => {
                         <AlertDescription>{cameraError}</AlertDescription>
                       </Alert>
                     )}
-                    <div className="text-center text-sm text-muted-foreground">
-                      <p>Point your camera at the QR code to automatically mark attendance</p>
-                      <p className="text-xs mt-1">or use manual entry below</p>
-                    </div>
                     <Button 
                       variant="outline" 
                       onClick={() => {
@@ -1358,26 +1354,15 @@ export const StudentLayout: React.FC = () => {
                   </Alert>
                 )}
                 
-                {!showManualEntry && (
-                  <div className="text-center text-sm text-muted-foreground">
-                    <p>Point your camera at the QR code to automatically mark attendance</p>
-                    <p className="text-xs mt-1">or use manual entry below</p>
-                  </div>
-                )}
-                
                 <Button 
                   onClick={() => {
-                    console.log('Main button clicked');
-                    if (showManualEntry) {
-                      handleQrMarkAttendance();
-                    } else {
-                      setShowManualEntry(true);
-                    }
+                    console.log('Mark Attendance clicked');
+                    handleQrMarkAttendance();
                   }} 
-                  disabled={isScanning || (showManualEntry && !qrSessionId)}
+                  disabled={isScanning || !qrSessionId}
                   className="w-full"
                 >
-                  {isScanning ? 'Processing...' : showManualEntry ? 'Mark Attendance' : 'Use Manual Entry'}
+                  {isScanning ? 'Processing...' : 'Mark Attendance'}
                 </Button>
               </div>
             </DialogContent>

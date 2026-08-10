@@ -980,7 +980,7 @@ export const FacultyLayout: React.FC = () => {
 
   // QR Attendance Handlers
   const handleStartQrSession = async () => {
-    if (!qrSessionForm.subject || qrSessionForm.branches.length === 0 || qrSessionForm.sections.length === 0) {
+    if (!qrSessionForm.subject || !qrSessionForm.branch || qrSessionForm.sections.length === 0) {
       toast({ title: 'Validation Error', description: 'Please fill in all required fields.', variant: 'destructive' });
       return;
     }
