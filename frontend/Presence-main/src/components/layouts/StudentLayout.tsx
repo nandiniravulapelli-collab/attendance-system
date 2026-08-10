@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { QRCodeSVG } from 'react-qr-code';
+import QRCode from 'react-qr-code';
 import {
   PieChart,
   Pie,
@@ -41,6 +41,7 @@ import {
   Scan,
   Camera
 } from 'lucide-react';
+import QrScanner from 'react-qr-scanner';
 import { db } from '@/lib/mockDb';
 import { toast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/api';
@@ -83,6 +84,8 @@ export const StudentLayout: React.FC = () => {
   const [deviceId, setDeviceId] = useState('');
   const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
 
   const numericId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
   useEffect(() => {
@@ -394,9 +397,12 @@ export const StudentLayout: React.FC = () => {
     : completeAttendanceFilteredBySubject.slice(0, 10);
 
   // QR Attendance Handlers
-  const handleQrMarkAttendance = async () => {
-    if (!qrSessionId || !qrToken) {
-      toast({ title: 'Validation Error', description: 'Please enter session ID and QR token.', variant: 'destructive' });
+  const handleQrMarkAttendance = async (qrData?: string) => {
+    // If QR data is provided (from scan), use it; otherwise use manual entry
+    const sessionInfo = qrData || `${qrSessionId}:${qrToken}`;
+    
+    if (!sessionInfo || sessionInfo.split(':').length !== 2) {
+      toast({ title: 'Validation Error', description: 'Please scan a valid QR code or enter session details.', variant: 'destructive' });
       return;
     }
 
@@ -413,8 +419,7 @@ export const StudentLayout: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          session_id: qrSessionId,
-          qr_token: qrToken,
+          qr_data: sessionInfo,
           device_id: finalDeviceId
         })
       });
@@ -444,9 +449,23 @@ export const StudentLayout: React.FC = () => {
         success: false,
         message: 'Network error. Please try again.'
       });
+      toast({ title: 'Error', description: 'Network error. Please try again.', variant: 'destructive' });
     } finally {
       setIsScanning(false);
     }
+  };
+
+  const handleQrScan = (result: any) => {
+    if (result) {
+      const qrData = result.text || result;
+      handleQrMarkAttendance(qrData);
+    }
+  };
+
+  const handleQrError = (error: any) => {
+    console.error('QR Scanner error:', error);
+    setCameraError('Camera access not available. Please use manual entry.');
+    setShowManualEntry(true);
   };
 
   // Generate device ID on mount
@@ -1162,48 +1181,88 @@ export const StudentLayout: React.FC = () => {
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Scan QR Code</DialogTitle>
-                <DialogDescription>Position the QR code within the camera frame to mark attendance</DialogDescription>
+                <DialogDescription>
+                  {showManualEntry 
+                    ? 'Enter session details manually' 
+                    : 'Position the QR code within the camera frame to mark attendance'}
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="bg-black rounded-lg aspect-square flex items-center justify-center overflow-hidden relative">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center text-white">
-                      <Camera className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm opacity-50">Camera access required</p>
+                {!showManualEntry ? (
+                  <>
+                    <div className="bg-black rounded-lg aspect-square flex items-center justify-center overflow-hidden relative">
+                      <QrScanner
+                        onResult={handleQrScan}
+                        onError={handleQrError}
+                        style={{ width: '100%', height: '100%' }}
+                        constraints={{
+                          facingMode: 'environment'
+                        }}
+                      />
                     </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="manual-session-id">Or enter Session ID manually</Label>
-                  <Input
-                    id="manual-session-id"
-                    value={qrSessionId}
-                    onChange={(e) => setQrSessionId(e.target.value)}
-                    placeholder="Enter session ID from faculty screen"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="manual-token">QR Token</Label>
-                  <Input
-                    id="manual-token"
-                    value={qrToken}
-                    onChange={(e) => setQrToken(e.target.value)}
-                    placeholder="Enter QR token if manual entry"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="device-id">Device ID</Label>
-                  <Input
-                    id="device-id"
-                    value={deviceId}
-                    onChange={(e) => setDeviceId(e.target.value)}
-                    placeholder="Auto-generated for your device"
-                    disabled
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    This identifies your device for this session only
-                  </p>
-                </div>
+                    {cameraError && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Camera Error</AlertTitle>
+                        <AlertDescription>{cameraError}</AlertDescription>
+                      </Alert>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowManualEntry(true)}
+                      className="w-full"
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Use Manual Entry Instead
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="manual-session-id">Session ID</Label>
+                      <Input
+                        id="manual-session-id"
+                        value={qrSessionId}
+                        onChange={(e) => setQrSessionId(e.target.value)}
+                        placeholder="Enter session ID from faculty screen"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="manual-token">QR Token</Label>
+                      <Input
+                        id="manual-token"
+                        value={qrToken}
+                        onChange={(e) => setQrToken(e.target.value)}
+                        placeholder="Enter QR token if manual entry"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="device-id">Device ID</Label>
+                      <Input
+                        id="device-id"
+                        value={deviceId}
+                        onChange={(e) => setDeviceId(e.target.value)}
+                        placeholder="Auto-generated for your device"
+                        disabled
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        This identifies your device for this session only
+                      </p>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setShowManualEntry(false);
+                        setCameraError(null);
+                      }}
+                      className="w-full"
+                    >
+                      <Camera className="w-4 h-4 mr-2" />
+                      Back to Camera Scan
+                    </Button>
+                  </>
+                )}
+                
                 {scanResult && (
                   <Alert variant={scanResult.success ? 'default' : 'destructive'}>
                     {scanResult.success ? (
@@ -1215,20 +1274,15 @@ export const StudentLayout: React.FC = () => {
                     <AlertDescription>{scanResult.message}</AlertDescription>
                   </Alert>
                 )}
+                
+                <Button 
+                  onClick={() => handleQrMarkAttendance()} 
+                  disabled={isScanning || (!qrSessionId || !qrToken)}
+                  className="w-full"
+                >
+                  {isScanning ? 'Processing...' : 'Mark Attendance'}
+                </Button>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => {
-                  setQrScanningOpen(false);
-                  setScanResult(null);
-                  setQrSessionId('');
-                  setQrToken('');
-                }}>
-                  Cancel
-                </Button>
-                <Button onClick={handleQrMarkAttendance} disabled={isScanning || (!qrSessionId || !qrToken)}>
-                  {isScanning ? 'Marking...' : 'Mark Attendance'}
-                </Button>
-              </DialogFooter>
             </DialogContent>
           </Dialog>
         </Tabs>

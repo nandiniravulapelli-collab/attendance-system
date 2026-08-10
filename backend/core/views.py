@@ -77,15 +77,18 @@ def _hash_device_id(device_id: str) -> str:
     return hashlib.sha256(device_id.encode()).hexdigest()
 
 
-def _generate_qr_code_base64(token: str) -> str:
-    """Generate QR code as base64 encoded image."""
+def _generate_qr_code_base64(token: str, session_id: int) -> str:
+    """Generate QR code as base64 encoded image with session information."""
+    # Embed session information in the QR code
+    qr_data = f"{session_id}:{token}"
+    
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
         box_size=10,
         border=4,
     )
-    qr.add_data(token)
+    qr.add_data(qr_data)
     qr.make(fit=True)
     
     img = qr.make_image(fill_color="black", back_color="white")
@@ -2129,7 +2132,7 @@ def qr_attendance_session_detail_view(request, session_id):
         
         # Add QR code image
         try:
-            response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token)
+            response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token, session.id)
         except Exception as e:
             response_data['qr_code_image'] = None
         
@@ -2154,9 +2157,22 @@ def qr_attendance_session_detail_view(request, session_id):
 @permission_classes([IsAuthenticated])
 def qr_attendance_mark_view(request):
     """Mark attendance using QR code."""
+    qr_data = request.data.get('qr_data')  # Combined session_id:token from QR scan
+    device_id = request.data.get('device_id')
+    
+    # Support both old format (separate fields) and new format (combined QR data)
     session_id = request.data.get('session_id')
     qr_token = request.data.get('qr_token')
-    device_id = request.data.get('device_id')
+    
+    if qr_data:
+        # Parse combined format: "session_id:token"
+        try:
+            parts = qr_data.split(':')
+            if len(parts) == 2:
+                session_id = parts[0]
+                qr_token = parts[1]
+        except:
+            return Response({"detail": "Invalid QR code format."}, status=400)
     
     if not all([session_id, qr_token, device_id]):
         return Response({"detail": "Session ID, QR token, and device ID are required."}, status=400)
