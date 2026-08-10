@@ -1766,6 +1766,22 @@ export const FacultyLayout: React.FC = () => {
                         <div className="flex-1">
                           <h3 className="text-lg font-semibold mb-4">Active Session</h3>
                           <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Session ID:</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-blue-600">{activeQrSession.id}</span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(String(activeQrSession.id));
+                                    toast({ title: 'Copied', description: 'Session ID copied to clipboard' });
+                                  }}
+                                >
+                                  <FileDown className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Subject:</span>
                               <span className="font-medium">{activeQrSession.subject}</span>
@@ -1836,6 +1852,7 @@ export const FacultyLayout: React.FC = () => {
                         <table className="w-full">
                           <thead className="bg-muted">
                             <tr>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Session ID</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Subject</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Branch</th>
@@ -1849,6 +1866,7 @@ export const FacultyLayout: React.FC = () => {
                           <tbody>
                             {qrSessions.map((session) => (
                               <tr key={session.id} className="border-t hover:bg-muted/50">
+                                <td className="px-4 py-2 text-sm font-medium text-blue-600">{session.id}</td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.year}</td>
                                 <td className="px-4 py-2 text-sm">{session.branch}</td>

@@ -464,7 +464,21 @@ export const StudentLayout: React.FC = () => {
 
   const handleQrError = (error: any) => {
     console.error('QR Scanner error:', error);
-    setCameraError('Camera access not available. Please use manual entry.');
+    let errorMessage = 'Camera access not available. Please use manual entry.';
+    
+    if (error.name === 'NotAllowedError') {
+      errorMessage = 'Camera permission denied. Please allow camera access or use manual entry.';
+    } else if (error.name === 'NotFoundError') {
+      errorMessage = 'No camera found on this device. Please use manual entry.';
+    } else if (error.name === 'NotReadableError') {
+      errorMessage = 'Camera is already in use. Please close other camera apps or use manual entry.';
+    } else if (error.name === 'OverconstrainedError') {
+      errorMessage = 'Camera does not support required features. Please use manual entry.';
+    } else if (error.name === 'StreamApiNotSupportedError') {
+      errorMessage = 'Your browser does not support camera access. Please use manual entry.';
+    }
+    
+    setCameraError(errorMessage);
     setShowManualEntry(true);
   };
 
@@ -1191,14 +1205,25 @@ export const StudentLayout: React.FC = () => {
                 {!showManualEntry ? (
                   <>
                     <div className="bg-black rounded-lg aspect-square flex items-center justify-center overflow-hidden relative">
-                      <QrScanner
-                        onResult={handleQrScan}
-                        onError={handleQrError}
-                        style={{ width: '100%', height: '100%' }}
-                        constraints={{
-                          facingMode: 'environment'
-                        }}
-                      />
+                      {!cameraError ? (
+                        <QrScanner
+                          onResult={handleQrScan}
+                          onError={handleQrError}
+                          style={{ width: '100%', height: '100%' }}
+                          constraints={{
+                            facingMode: 'environment'
+                          }}
+                          components={{
+                            audio: false,
+                            video: true
+                          }}
+                        />
+                      ) : (
+                        <div className="text-center text-white p-4">
+                          <Camera className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm opacity-50">Camera unavailable</p>
+                        </div>
+                      )}
                     </div>
                     {cameraError && (
                       <Alert variant="destructive">
