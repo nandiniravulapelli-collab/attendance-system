@@ -398,10 +398,17 @@ export const StudentLayout: React.FC = () => {
   // QR Attendance Handlers
   const handleQrMarkAttendance = async (qrData?: string) => {
     // If QR data is provided (from scan), use it; otherwise use manual entry
-    const sessionInfo = qrData || `${qrSessionId}`;
+    const sessionInfo = qrData || qrSessionId;
     
     if (!sessionInfo) {
       toast({ title: 'Validation Error', description: 'Please scan a valid QR code or enter session ID.', variant: 'destructive' });
+      return;
+    }
+
+    // Convert session ID to number if it's a string
+    const sessionId = parseInt(String(sessionInfo).split(':')[0]);
+    if (isNaN(sessionId)) {
+      toast({ title: 'Validation Error', description: 'Invalid session ID format.', variant: 'destructive' });
       return;
     }
 
@@ -418,7 +425,7 @@ export const StudentLayout: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          session_id: sessionInfo,
+          session_id: sessionId,
           device_id: finalDeviceId
         })
       });
@@ -433,13 +440,17 @@ export const StudentLayout: React.FC = () => {
         toast({ title: 'Success', description: 'Your attendance has been marked.' });
         setQrScanningOpen(false);
         setQrSessionId('');
+        setCameraError(null);
+        setShowManualEntry(false);
       } else {
         setScanResult({
           success: false,
           message: data.detail || 'Failed to mark attendance.'
         });
+        toast({ title: 'Error', description: data.detail || 'Failed to mark attendance', variant: 'destructive' });
       }
     } catch (error) {
+      console.error('QR attendance error:', error);
       setScanResult({
         success: false,
         message: 'Network error. Please try again.'
@@ -1264,6 +1275,7 @@ export const StudentLayout: React.FC = () => {
                       onClick={() => {
                         setShowManualEntry(false);
                         setCameraError(null);
+                        setScanResult(null);
                       }}
                       className="w-full"
                     >

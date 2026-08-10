@@ -2177,6 +2177,12 @@ def qr_attendance_mark_view(request):
     if not all([session_id, device_id]):
         return Response({"detail": "Session ID and device ID are required."}, status=400)
     
+    # Convert session_id to integer
+    try:
+        session_id = int(session_id)
+    except (ValueError, TypeError):
+        return Response({"detail": "Invalid session ID format."}, status=400)
+    
     # Only students can mark attendance
     if request.user.role != 'student':
         return Response({"detail": "Only students can mark attendance."}, status=403)
