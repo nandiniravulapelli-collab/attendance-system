@@ -397,42 +397,77 @@ export const StudentLayout: React.FC = () => {
 
   // QR Attendance Handlers
   const handleQrMarkAttendance = async (qrData?: string) => {
+    console.log('=== QR Attendance Mark Attendance Started ===');
+    console.log('Input qrData:', qrData);
+    console.log('Current qrSessionId:', qrSessionId);
+    console.log('Current deviceId:', deviceId);
+    console.log('Current user:', user);
+    
     // If QR data is provided (from scan), use it; otherwise use manual entry
     const sessionInfo = qrData || qrSessionId;
     
+    console.log('Session info to use:', sessionInfo);
+    
     if (!sessionInfo) {
+      console.error('No session info available');
       toast({ title: 'Validation Error', description: 'Please scan a valid QR code or enter session ID.', variant: 'destructive' });
       return;
     }
 
     // Convert session ID to number if it's a string
     const sessionId = parseInt(String(sessionInfo).split(':')[0]);
+    console.log('Parsed session ID:', sessionId);
+    
     if (isNaN(sessionId)) {
+      console.error('Invalid session ID:', sessionInfo);
       toast({ title: 'Validation Error', description: 'Invalid session ID format.', variant: 'destructive' });
       return;
     }
 
     // Generate device ID if not provided
     const finalDeviceId = deviceId || `${user?.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log('Final device ID:', finalDeviceId);
     setDeviceId(finalDeviceId);
 
     setIsScanning(true);
     setScanResult(null);
 
     try {
-      const res = await fetch(apiUrl('/api/qr-attendance/mark/'), {
+      const apiEndpoint = apiUrl('/api/qr-attendance/mark/');
+      console.log('API Endpoint:', apiEndpoint);
+      
+      const payload = {
+        session_id: sessionId,
+        device_id: finalDeviceId
+      };
+      console.log('Request payload:', payload);
+
+      const res = await fetch(apiEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         credentials: 'include',
-        body: JSON.stringify({
-          session_id: sessionId,
-          device_id: finalDeviceId
-        })
+        body: JSON.stringify(payload)
       });
 
-      const data = await res.json();
+      console.log('Response status:', res.status);
+      console.log('Response headers:', Object.fromEntries(res.headers.entries()));
+
+      let data;
+      try {
+        const text = await res.text();
+        console.log('Response text:', text);
+        data = JSON.parse(text);
+        console.log('Parsed response data:', data);
+      } catch (e) {
+        console.error('Failed to parse JSON response:', e);
+        data = { detail: 'Invalid response from server' };
+      }
 
       if (res.ok) {
+        console.log('Attendance marked successfully');
         setScanResult({
           success: true,
           message: data.detail || 'Attendance marked successfully!'
@@ -443,6 +478,7 @@ export const StudentLayout: React.FC = () => {
         setCameraError(null);
         setShowManualEntry(false);
       } else {
+        console.error('Attendance marking failed:', data);
         setScanResult({
           success: false,
           message: data.detail || 'Failed to mark attendance.'
@@ -450,7 +486,7 @@ export const StudentLayout: React.FC = () => {
         toast({ title: 'Error', description: data.detail || 'Failed to mark attendance', variant: 'destructive' });
       }
     } catch (error) {
-      console.error('QR attendance error:', error);
+      console.error('QR attendance network error:', error);
       setScanResult({
         success: false,
         message: 'Network error. Please try again.'
@@ -458,6 +494,7 @@ export const StudentLayout: React.FC = () => {
       toast({ title: 'Error', description: 'Network error. Please try again.', variant: 'destructive' });
     } finally {
       setIsScanning(false);
+      console.log('=== QR Attendance Mark Attendance Ended ===');
     }
   };
 
@@ -1214,15 +1251,17 @@ export const StudentLayout: React.FC = () => {
                   <>
                     <div className="bg-black rounded-lg aspect-square flex items-center justify-center overflow-hidden relative">
                       {!cameraError ? (
-                        <QrScanner
-                          onResult={handleQrScan}
-                          onError={handleQrError}
-                          constraints={{
-                            facingMode: 'environment'
-                          }}
-                          containerStyle={{ width: '100%', height: '100%' }}
-                          videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
+                        <div className="w-full h-full">
+                          <QrScanner
+                            onResult={handleQrScan}
+                            onError={handleQrError}
+                            constraints={{
+                              facingMode: 'environment'
+                            }}
+                            videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            containerStyle={{ width: '100%', height: '100%' }}
+                          />
+                        </div>
                       ) : (
                         <div className="text-center text-white p-4">
                           <Camera className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -1239,7 +1278,10 @@ export const StudentLayout: React.FC = () => {
                     )}
                     <Button 
                       variant="outline" 
-                      onClick={() => setShowManualEntry(true)}
+                      onClick={() => {
+                        console.log('Use Manual Entry clicked');
+                        setShowManualEntry(true);
+                      }}
                       className="w-full"
                     >
                       <Edit className="w-4 h-4 mr-2" />
@@ -1273,9 +1315,11 @@ export const StudentLayout: React.FC = () => {
                     <Button 
                       variant="outline" 
                       onClick={() => {
+                        console.log('Back to camera clicked');
                         setShowManualEntry(false);
                         setCameraError(null);
                         setScanResult(null);
+                        setQrSessionId('');
                       }}
                       className="w-full"
                     >
@@ -1298,7 +1342,10 @@ export const StudentLayout: React.FC = () => {
                 )}
                 
                 <Button 
-                  onClick={() => handleQrMarkAttendance()} 
+                  onClick={() => {
+                    console.log('Mark Attendance clicked');
+                    handleQrMarkAttendance();
+                  }} 
                   disabled={isScanning || !qrSessionId}
                   className="w-full"
                 >
