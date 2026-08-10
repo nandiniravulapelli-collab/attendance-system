@@ -182,7 +182,7 @@ export const AdminLayout: React.FC = () => {
   const [adminQrSessionForm, setAdminQrSessionForm] = useState({
     subject: '',
     year: '1',
-    branches: [] as string[],
+    branch: '',
     sections: [] as string[],
     duration_hours: 1,
     faculty_id: ''
@@ -1842,7 +1842,7 @@ export const AdminLayout: React.FC = () => {
         body: JSON.stringify({
           subject: adminQrSessionForm.subject,
           year: adminQrSessionForm.year,
-          branches: adminQrSessionForm.branches,
+          branch: adminQrSessionForm.branch,
           sections: adminQrSessionForm.sections,
           duration_minutes: adminQrSessionForm.duration_hours * 60
         })
@@ -1854,7 +1854,7 @@ export const AdminLayout: React.FC = () => {
         setAdminQrSessionForm({
           subject: '',
           year: '1',
-          branches: [],
+          branch: '',
           sections: [],
           duration_hours: 1,
           faculty_id: ''
@@ -1864,33 +1864,6 @@ export const AdminLayout: React.FC = () => {
       } else {
         const err = await res.json().catch(() => ({}));
         toast({ title: 'Error', description: err.detail || 'Failed to start session.', variant: 'destructive' });
-      }
-    } catch (error) {
-      toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
-    }
-  };
-
-  const handleAdminDeleteQrSession = async (sessionId: number) => {
-    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
-      return;
-    }
-
-    try {
-      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/delete/`), {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      if (res.ok) {
-        toast({ title: 'Success', description: 'Session deleted successfully.' });
-        loadAdminQrSessions();
-        if (adminActiveQrSession?.id === sessionId) {
-          setAdminActiveQrSession(null);
-          setAdminQrCodeImage(null);
-        }
-      } else {
-        const err = await res.json().catch(() => ({}));
-        toast({ title: 'Error', description: err.detail || 'Failed to delete session.', variant: 'destructive' });
       }
     } catch (error) {
       toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
@@ -3772,8 +3745,8 @@ export const AdminLayout: React.FC = () => {
                               <span className="font-medium">{adminActiveQrSession.year}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-sm text-muted-foreground">Branch(es):</span>
-                              <span className="font-medium">{adminActiveQrSession.branches || adminActiveQrSession.branch}</span>
+                              <span className="text-sm text-muted-foreground">Branch:</span>
+                              <span className="font-medium">{adminActiveQrSession.branch}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Sections:</span>
@@ -3836,7 +3809,7 @@ export const AdminLayout: React.FC = () => {
                               <th className="px-4 py-2 text-left text-sm font-medium">Faculty</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Subject</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Branch(es)</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Branch</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Sections</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Duration (hours)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Attendance</th>
@@ -3850,7 +3823,7 @@ export const AdminLayout: React.FC = () => {
                                 <td className="px-4 py-2 text-sm">{session.faculty_name}</td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.year}</td>
-                                <td className="px-4 py-2 text-sm">{session.branches || session.branch}</td>
+                                <td className="px-4 py-2 text-sm">{session.branch}</td>
                                 <td className="px-4 py-2 text-sm">{session.sections}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
                                 <td className="px-4 py-2 text-sm">{session.attendance_count}</td>
@@ -3860,24 +3833,15 @@ export const AdminLayout: React.FC = () => {
                                   </Badge>
                                 </td>
                                 <td className="px-4 py-2 text-sm">
-                                  <div className="flex gap-2">
-                                    {session.is_active && (
-                                      <Button 
-                                        variant="outline" 
-                                        size="sm"
-                                        onClick={() => handleAdminActivateQrSession(session.id)}
-                                      >
-                                        View
-                                      </Button>
-                                    )}
+                                  {session.is_active && (
                                     <Button 
-                                      variant="destructive" 
+                                      variant="outline" 
                                       size="sm"
-                                      onClick={() => handleAdminDeleteQrSession(session.id)}
+                                      onClick={() => handleAdminActivateQrSession(session.id)}
                                     >
-                                      Delete
+                                      View
                                     </Button>
-                                  </div>
+                                  )}
                                 </td>
                               </tr>
                             ))}
@@ -5135,26 +5099,19 @@ export const AdminLayout: React.FC = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="admin-qr-branches">Branches *</Label>
-                  <div className="border rounded-lg p-3 max-h-32 overflow-y-auto">
-                    {apiDepartments.map((dept) => (
-                      <div key={dept.code} className="flex items-center space-x-2 mb-2">
-                        <Checkbox
-                          id={`admin-qr-branch-${dept.code}`}
-                          checked={adminQrSessionForm.branches.includes(dept.code)}
-                          onCheckedChange={(checked) => {
-                            const next = checked
-                              ? [...adminQrSessionForm.branches, dept.code]
-                              : adminQrSessionForm.branches.filter(b => b !== dept.code);
-                            setAdminQrSessionForm({...adminQrSessionForm, branches: next});
-                          }}
-                        />
-                        <label htmlFor={`admin-qr-branch-${dept.code}`} className="text-sm cursor-pointer">
+                  <Label htmlFor="admin-qr-branch">Branch *</Label>
+                  <Select value={adminQrSessionForm.branch} onValueChange={(value) => setAdminQrSessionForm({...adminQrSessionForm, branch: value})}>
+                    <SelectTrigger id="admin-qr-branch">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {apiDepartments.map((dept) => (
+                        <SelectItem key={dept.code} value={dept.code}>
                           {dept.code} - {dept.name}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="admin-qr-sections">Sections *</Label>

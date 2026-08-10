@@ -27,7 +27,6 @@ from .views import (
     qr_attendance_session_detail_view,
     qr_attendance_mark_view,
     qr_attendance_records_view,
-    qr_attendance_session_delete_view,
 )
 
 urlpatterns = [
@@ -56,7 +55,6 @@ urlpatterns = [
     path('faculty-department-sections/<int:user_id>/', faculty_department_sections_view),
     path('qr-attendance/sessions/', qr_attendance_sessions_view),
     path('qr-attendance/sessions/<int:session_id>/', qr_attendance_session_detail_view),
-    path('qr-attendance/sessions/<int:session_id>/delete/', qr_attendance_session_delete_view),
     path('qr-attendance/mark/', qr_attendance_mark_view),
     path('qr-attendance/sessions/<int:session_id>/records/', qr_attendance_records_view),
 ]
