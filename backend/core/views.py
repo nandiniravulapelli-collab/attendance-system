@@ -2053,10 +2053,21 @@ def qr_attendance_sessions_view(request):
         subject = data.get('subject')
         year = data.get('year')
         branch = data.get('branch')
+        branches = data.get('branches', [])  # Support new format
         sections = data.get('sections', [])
         duration_minutes = data.get('duration_minutes', 10)
         
-        if not all([subject, year, branch, sections]):
+        # Handle both single branch and multiple branches
+        if branches and isinstance(branches, list) and len(branches) > 0:
+            # Use multiple branches (new format)
+            final_branch = branches[0]  # Use first branch for backward compatibility
+        elif branch:
+            # Use single branch (old format)
+            final_branch = branch
+        else:
+            return Response({"detail": "Branch is required."}, status=400)
+        
+        if not all([subject, year, final_branch, sections]):
             return Response({"detail": "Subject, year, branch, and sections are required."}, status=400)
         
         if isinstance(sections, str):
@@ -2068,7 +2079,7 @@ def qr_attendance_sessions_view(request):
             # Faculty has specific section assignments
             allowed_sections = set()
             for fds in faculty_dept_sections:
-                if fds.department.code == branch:
+                if fds.department.code == final_branch:
                     allowed_sections.add(fds.section.name)
             
             if not allowed_sections:
@@ -2080,7 +2091,7 @@ def qr_attendance_sessions_view(request):
                     return Response({"detail": f"Faculty is not assigned to section {section}."}, status=403)
         else:
             # Faculty has no specific section assignments, check department
-            if branch not in (target_faculty.department or '').split(','):
+            if final_branch not in (target_faculty.department or '').split(','):
                 return Response({"detail": "Faculty is not assigned to this department."}, status=403)
         
         # Create session
@@ -2092,7 +2103,7 @@ def qr_attendance_sessions_view(request):
             faculty=target_faculty,
             subject=subject,
             year=year,
-            branch=branch,
+            branch=final_branch,
             sections=','.join(sections),
             duration_minutes=duration_minutes,
             end_time=end_time,

@@ -199,11 +199,12 @@ class QRAttendanceSessionSerializer(serializers.ModelSerializer):
     faculty_name = serializers.SerializerMethodField(read_only=True)
     attendance_count = serializers.SerializerMethodField(read_only=True)
     is_expired = serializers.SerializerMethodField(read_only=True)
+    branches = serializers.SerializerMethodField(read_only=True)  # For backward compatibility
 
     class Meta:
         model = QRAttendanceSession
         fields = (
-            'id', 'faculty', 'faculty_name', 'subject', 'year', 'branch', 'sections',
+            'id', 'faculty', 'faculty_name', 'subject', 'year', 'branch', 'branches', 'sections',
             'duration_minutes', 'start_time', 'end_time', 'is_active', 
             'current_qr_token', 'token_expires_at', 'token_refresh_interval',
             'attendance_count', 'is_expired'
@@ -219,6 +220,14 @@ class QRAttendanceSessionSerializer(serializers.ModelSerializer):
     def get_is_expired(self, obj):
         from django.utils import timezone
         return timezone.now() > obj.end_time
+
+    def get_branches(self, obj):
+        # Return branches field if it exists, otherwise use branch field
+        if hasattr(obj, 'branches') and obj.branches:
+            return obj.branches
+        elif obj.branch:
+            return obj.branch
+        return ''
 
 
 class QRAttendanceRecordSerializer(serializers.ModelSerializer):
