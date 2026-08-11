@@ -176,7 +176,7 @@ export const FacultyLayout: React.FC = () => {
   const [qrSessionForm, setQrSessionForm] = useState({
     subject: '',
     year: '1',
-    branch: '',
+    branches: [] as string[],
     sections: [] as string[],
     duration_hours: 1
   });
@@ -980,7 +980,7 @@ export const FacultyLayout: React.FC = () => {
 
   // QR Attendance Handlers
   const handleStartQrSession = async () => {
-    if (!qrSessionForm.subject || !qrSessionForm.branch || qrSessionForm.sections.length === 0) {
+    if (!qrSessionForm.subject || qrSessionForm.branches.length === 0 || qrSessionForm.sections.length === 0) {
       toast({ title: 'Validation Error', description: 'Please fill in all required fields.', variant: 'destructive' });
       return;
     }
@@ -993,7 +993,7 @@ export const FacultyLayout: React.FC = () => {
         body: JSON.stringify({
           subject: qrSessionForm.subject,
           year: qrSessionForm.year,
-          branch: qrSessionForm.branch,
+          branches: qrSessionForm.branches,
           sections: qrSessionForm.sections,
           duration_minutes: qrSessionForm.duration_hours * 60
         })
@@ -1005,7 +1005,7 @@ export const FacultyLayout: React.FC = () => {
         setQrSessionForm({
           subject: '',
           year: '1',
-          branch: '',
+          branches: [],
           sections: [],
           duration_hours: 1
         });
@@ -1791,8 +1791,8 @@ export const FacultyLayout: React.FC = () => {
                               <span className="font-medium">{activeQrSession.year}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-sm text-muted-foreground">Branch:</span>
-                              <span className="font-medium">{activeQrSession.branch}</span>
+                              <span className="text-sm text-muted-foreground">Branch(es):</span>
+                              <span className="font-medium">{activeQrSession.branches || activeQrSession.branch}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Sections:</span>
@@ -1855,7 +1855,7 @@ export const FacultyLayout: React.FC = () => {
                               <th className="px-4 py-2 text-left text-sm font-medium">Session ID</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Subject</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Branch</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Branch(es)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Sections</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Duration (hours)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Attendance</th>
@@ -1869,7 +1869,7 @@ export const FacultyLayout: React.FC = () => {
                                 <td className="px-4 py-2 text-sm font-medium text-blue-600">{session.id}</td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.year}</td>
-                                <td className="px-4 py-2 text-sm">{session.branch}</td>
+                                <td className="px-4 py-2 text-sm">{session.branches || session.branch}</td>
                                 <td className="px-4 py-2 text-sm">{session.sections}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
                                 <td className="px-4 py-2 text-sm">{session.attendance_count}</td>
@@ -2495,19 +2495,26 @@ export const FacultyLayout: React.FC = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="qr-branch">Branch *</Label>
-                  <Select value={qrSessionForm.branch} onValueChange={(value) => setQrSessionForm({...qrSessionForm, branch: value})}>
-                    <SelectTrigger id="qr-branch">
-                      <SelectValue placeholder="Select branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {facultyBranchOptions.map((dept) => (
-                        <SelectItem key={dept.code} value={dept.code}>
+                  <Label htmlFor="qr-branches">Branches *</Label>
+                  <div className="border rounded-lg p-3 max-h-32 overflow-y-auto">
+                    {facultyBranchOptions.map((dept) => (
+                      <div key={dept.code} className="flex items-center space-x-2 mb-2">
+                        <Checkbox
+                          id={`qr-branch-${dept.code}`}
+                          checked={qrSessionForm.branches.includes(dept.code)}
+                          onCheckedChange={(checked) => {
+                            const next = checked
+                              ? [...qrSessionForm.branches, dept.code]
+                              : qrSessionForm.branches.filter(b => b !== dept.code);
+                            setQrSessionForm({...qrSessionForm, branches: next});
+                          }}
+                        />
+                        <label htmlFor={`qr-branch-${dept.code}`} className="text-sm cursor-pointer">
                           {dept.code} - {dept.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="qr-sections">Sections *</Label>

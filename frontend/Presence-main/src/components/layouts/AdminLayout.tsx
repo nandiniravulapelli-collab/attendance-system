@@ -182,7 +182,7 @@ export const AdminLayout: React.FC = () => {
   const [adminQrSessionForm, setAdminQrSessionForm] = useState({
     subject: '',
     year: '1',
-    branch: '',
+    branches: [] as string[],
     sections: [] as string[],
     duration_hours: 1,
     faculty_id: ''
@@ -1821,7 +1821,7 @@ export const AdminLayout: React.FC = () => {
 
   // Admin QR Attendance Handlers
   const handleAdminStartQrSession = async () => {
-    if (!adminQrSessionForm.faculty_id || !adminQrSessionForm.subject || !adminQrSessionForm.branch || adminQrSessionForm.sections.length === 0) {
+    if (!adminQrSessionForm.faculty_id || !adminQrSessionForm.subject || adminQrSessionForm.branches.length === 0 || adminQrSessionForm.sections.length === 0) {
       toast({ title: 'Validation Error', description: 'Please fill in all required fields.', variant: 'destructive' });
       return;
     }
@@ -1842,7 +1842,7 @@ export const AdminLayout: React.FC = () => {
         body: JSON.stringify({
           subject: adminQrSessionForm.subject,
           year: adminQrSessionForm.year,
-          branch: adminQrSessionForm.branch,
+          branches: adminQrSessionForm.branches,
           sections: adminQrSessionForm.sections,
           duration_minutes: adminQrSessionForm.duration_hours * 60
         })
@@ -1854,7 +1854,7 @@ export const AdminLayout: React.FC = () => {
         setAdminQrSessionForm({
           subject: '',
           year: '1',
-          branch: '',
+          branches: [],
           sections: [],
           duration_hours: 1,
           faculty_id: ''
@@ -3745,8 +3745,8 @@ export const AdminLayout: React.FC = () => {
                               <span className="font-medium">{adminActiveQrSession.year}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-sm text-muted-foreground">Branch:</span>
-                              <span className="font-medium">{adminActiveQrSession.branch}</span>
+                              <span className="text-sm text-muted-foreground">Branch(es):</span>
+                              <span className="font-medium">{adminActiveQrSession.branches || adminActiveQrSession.branch}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Sections:</span>
@@ -3809,7 +3809,7 @@ export const AdminLayout: React.FC = () => {
                               <th className="px-4 py-2 text-left text-sm font-medium">Faculty</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Subject</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Branch</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Branch(es)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Sections</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Duration (hours)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Attendance</th>
@@ -3823,7 +3823,7 @@ export const AdminLayout: React.FC = () => {
                                 <td className="px-4 py-2 text-sm">{session.faculty_name}</td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.year}</td>
-                                <td className="px-4 py-2 text-sm">{session.branch}</td>
+                                <td className="px-4 py-2 text-sm">{session.branches || session.branch}</td>
                                 <td className="px-4 py-2 text-sm">{session.sections}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
                                 <td className="px-4 py-2 text-sm">{session.attendance_count}</td>
@@ -5099,19 +5099,26 @@ export const AdminLayout: React.FC = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="admin-qr-branch">Branch *</Label>
-                  <Select value={adminQrSessionForm.branch} onValueChange={(value) => setAdminQrSessionForm({...adminQrSessionForm, branch: value})}>
-                    <SelectTrigger id="admin-qr-branch">
-                      <SelectValue placeholder="Select branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {apiDepartments.map((dept) => (
-                        <SelectItem key={dept.code} value={dept.code}>
+                  <Label htmlFor="admin-qr-branches">Branches *</Label>
+                  <div className="border rounded-lg p-3 max-h-32 overflow-y-auto">
+                    {apiDepartments.map((dept) => (
+                      <div key={dept.code} className="flex items-center space-x-2 mb-2">
+                        <Checkbox
+                          id={`admin-qr-branch-${dept.code}`}
+                          checked={adminQrSessionForm.branches.includes(dept.code)}
+                          onCheckedChange={(checked) => {
+                            const next = checked
+                              ? [...adminQrSessionForm.branches, dept.code]
+                              : adminQrSessionForm.branches.filter(b => b !== dept.code);
+                            setAdminQrSessionForm({...adminQrSessionForm, branches: next});
+                          }}
+                        />
+                        <label htmlFor={`admin-qr-branch-${dept.code}`} className="text-sm cursor-pointer">
                           {dept.code} - {dept.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="admin-qr-sections">Sections *</Label>
