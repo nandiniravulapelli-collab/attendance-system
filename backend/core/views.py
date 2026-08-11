@@ -2102,20 +2102,40 @@ def qr_attendance_sessions_view(request):
         end_time = start_time + datetime.timedelta(minutes=duration_minutes)
         token_expires_at = start_time + datetime.timedelta(seconds=5)  # Initial token expires in 5 seconds
         
-        # Create session with branches field (migration applied)
+        # Create session with backward compatibility
         try:
+            # Try to use new format with branches field
             session = QRAttendanceSession.objects.create(
                 faculty=target_faculty,
                 subject=subject,
                 year=year,
                 branch=final_branch,
-                branches=','.join(final_branches),  # Set branches field
+                branches=','.join(final_branches),
                 sections=','.join(sections),
                 duration_minutes=duration_minutes,
                 end_time=end_time,
                 current_qr_token=_generate_qr_token(),
                 token_expires_at=token_expires_at
             )
+        except TypeError as e:
+            # If branches field doesn't exist (migration not applied), use old format
+            if 'branches' in str(e):
+                session = QRAttendanceSession.objects.create(
+                    faculty=target_faculty,
+                    subject=subject,
+                    year=year,
+                    branch=final_branch,
+                    sections=','.join(sections),
+                    duration_minutes=duration_minutes,
+                    end_time=end_time,
+                    current_qr_token=_generate_qr_token(),
+                    token_expires_at=token_expires_at
+                )
+            else:
+                import traceback
+                error_details = traceback.format_exc()
+                print(f"Error creating QR session: {error_details}")
+                return Response({"detail": f"Failed to create session: {str(e)}"}, status=500)
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
