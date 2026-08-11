@@ -2069,48 +2069,46 @@ def qr_attendance_sessions_view(request):
         else:
             return Response({"detail": "Branch is required."}, status=400)
         
-        if not all([subject, year, final_branches, sections]):
-            return Response({"detail": "Subject, year, branch(es), and sections are required."}, status=400)
+        if not all([subject, year, final_branch, sections]):
+            return Response({"detail": "Subject, year, branch, and sections are required."}, status=400)
         
         if isinstance(sections, str):
             sections = [s.strip() for s in sections.split(',') if s.strip()]
         
-        # Check if faculty is assigned to the specified departments and sections
+        # Simplified validation - just check first branch for now
         faculty_dept_sections = FacultyDepartmentSection.objects.filter(faculty=target_faculty)
         if faculty_dept_sections.exists():
             # Faculty has specific section assignments
             allowed_sections = set()
             for fds in faculty_dept_sections:
-                if fds.department.code in final_branches:
+                if fds.department.code == final_branch:
                     allowed_sections.add(fds.section.name)
             
             if not allowed_sections:
-                return Response({"detail": "Faculty is not assigned to any of these departments."}, status=403)
+                return Response({"detail": "Faculty is not assigned to this department."}, status=403)
             
             # Check if all requested sections are allowed
             for section in sections:
                 if section not in allowed_sections:
                     return Response({"detail": f"Faculty is not assigned to section {section}."}, status=403)
         else:
-            # Faculty has no specific section assignments, check departments
-            faculty_depts = (target_faculty.department or '').split(',')
-            for requested_branch in final_branches:
-                if requested_branch not in faculty_depts:
-                    return Response({"detail": f"Faculty is not assigned to department {requested_branch}."}, status=403)
+            # Faculty has no specific section assignments, check department
+            faculty_depts = [d.strip() for d in (target_faculty.department or '').split(',') if d.strip()]
+            if final_branch not in faculty_depts:
+                return Response({"detail": "Faculty is not assigned to this department."}, status=403)
         
         # Create session
         start_time = timezone.now()
         end_time = start_time + datetime.timedelta(minutes=duration_minutes)
         token_expires_at = start_time + datetime.timedelta(seconds=5)  # Initial token expires in 5 seconds
         
-        # Try to use new format with branches field, fall back to old format
+        # Create session with backward compatibility
         try:
             session = QRAttendanceSession.objects.create(
                 faculty=target_faculty,
                 subject=subject,
                 year=year,
                 branch=final_branch,
-                branches=','.join(final_branches),
                 sections=','.join(sections),
                 duration_minutes=duration_minutes,
                 end_time=end_time,
@@ -2118,21 +2116,10 @@ def qr_attendance_sessions_view(request):
                 token_expires_at=token_expires_at
             )
         except Exception as e:
-            # If branches field doesn't exist (migration not applied), use old format
-            if 'branches' in str(e):
-                session = QRAttendanceSession.objects.create(
-                    faculty=target_faculty,
-                    subject=subject,
-                    year=year,
-                    branch=final_branch,
-                    sections=','.join(sections),
-                    duration_minutes=duration_minutes,
-                    end_time=end_time,
-                    current_qr_token=_generate_qr_token(),
-                    token_expires_at=token_expires_at
-                )
-            else:
-                raise
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Error creating QR session: {error_details}")
+            return Response({"detail": f"Failed to create session: {str(e)}"}, status=500)
         
         serializer = QRAttendanceSessionSerializer(session)
         return Response(serializer.data, status=201)
