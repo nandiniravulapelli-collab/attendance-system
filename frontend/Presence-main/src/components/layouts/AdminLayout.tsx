@@ -181,9 +181,6 @@ export const AdminLayout: React.FC = () => {
   const [adminQrRefreshInterval, setAdminQrRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   const [adminQrSessionForm, setAdminQrSessionForm] = useState({
     subject: '',
-    year: '1',
-    branches: [] as string[],
-    sections: [] as string[],
     duration_hours: 1,
     faculty_id: ''
   });
@@ -1821,8 +1818,8 @@ export const AdminLayout: React.FC = () => {
 
   // Admin QR Attendance Handlers
   const handleAdminStartQrSession = async () => {
-    if (!adminQrSessionForm.faculty_id || !adminQrSessionForm.subject || adminQrSessionForm.branches.length === 0 || adminQrSessionForm.sections.length === 0) {
-      toast({ title: 'Validation Error', description: 'Please fill in all required fields.', variant: 'destructive' });
+    if (!adminQrSessionForm.faculty_id || !adminQrSessionForm.subject) {
+      toast({ title: 'Validation Error', description: 'Please select faculty and subject.', variant: 'destructive' });
       return;
     }
 
@@ -1840,10 +1837,8 @@ export const AdminLayout: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
+          faculty_id: adminQrSessionForm.faculty_id,
           subject: adminQrSessionForm.subject,
-          year: adminQrSessionForm.year,
-          branches: adminQrSessionForm.branches,
-          sections: adminQrSessionForm.sections,
           duration_minutes: adminQrSessionForm.duration_hours * 60
         })
       });
@@ -1853,9 +1848,6 @@ export const AdminLayout: React.FC = () => {
         setAdminQrSessionDialogOpen(false);
         setAdminQrSessionForm({
           subject: '',
-          year: '1',
-          branches: [],
-          sections: [],
           duration_hours: 1,
           faculty_id: ''
         });
@@ -5083,64 +5075,6 @@ export const AdminLayout: React.FC = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="admin-qr-year">Year *</Label>
-                  <Select value={adminQrSessionForm.year} onValueChange={(value) => setAdminQrSessionForm({...adminQrSessionForm, year: value})}>
-                    <SelectTrigger id="admin-qr-year">
-                      <SelectValue placeholder="Select year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Year 1</SelectItem>
-                      <SelectItem value="2">Year 2</SelectItem>
-                      <SelectItem value="3">Year 3</SelectItem>
-                      <SelectItem value="4">Year 4</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="admin-qr-branches">Branches *</Label>
-                  <div className="border rounded-lg p-3 max-h-32 overflow-y-auto">
-                    {apiDepartments.map((dept) => (
-                      <div key={dept.code} className="flex items-center space-x-2 mb-2">
-                        <Checkbox
-                          id={`admin-qr-branch-${dept.code}`}
-                          checked={adminQrSessionForm.branches.includes(dept.code)}
-                          onCheckedChange={(checked) => {
-                            const next = checked
-                              ? [...adminQrSessionForm.branches, dept.code]
-                              : adminQrSessionForm.branches.filter(b => b !== dept.code);
-                            setAdminQrSessionForm({...adminQrSessionForm, branches: next});
-                          }}
-                        />
-                        <label htmlFor={`admin-qr-branch-${dept.code}`} className="text-sm cursor-pointer">
-                          {dept.code} - {dept.name}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="admin-qr-sections">Sections *</Label>
-                  <div className="border rounded-lg p-3 max-h-32 overflow-y-auto">
-                    {apiSections.map((section) => (
-                      <div key={section.id} className="flex items-center space-x-2 mb-2">
-                        <Checkbox
-                          id={`admin-qr-section-${section.id}`}
-                          checked={adminQrSessionForm.sections.includes(section.name)}
-                          onCheckedChange={(checked) => {
-                            const next = checked
-                              ? [...adminQrSessionForm.sections, section.name]
-                              : adminQrSessionForm.sections.filter(s => s !== section.name);
-                            setAdminQrSessionForm({...adminQrSessionForm, sections: next});
-                          }}
-                        />
-                        <label htmlFor={`admin-qr-section-${section.id}`} className="text-sm cursor-pointer">
-                          {section.name}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="admin-qr-duration">Duration (hours) *</Label>
