@@ -2076,27 +2076,12 @@ def qr_attendance_sessions_view(request):
         if isinstance(sections, str):
             sections = [s.strip() for s in sections.split(',') if s.strip()]
         
-        # Simplified validation - just check department
-        faculty_dept_sections = FacultyDepartmentSection.objects.filter(faculty=target_faculty)
-        if faculty_dept_sections.exists():
-            # Faculty has specific section assignments
-            allowed_sections = set()
-            for fds in faculty_dept_sections:
-                if fds.department.code == branch:
-                    allowed_sections.add(fds.section.name)
-            
-            if not allowed_sections:
-                return Response({"detail": "Faculty is not assigned to this department."}, status=403)
-            
-            # Check if all requested sections are allowed
-            for section in sections:
-                if section not in allowed_sections:
-                    return Response({"detail": f"Faculty is not assigned to section {section}."}, status=403)
-        else:
-            # Faculty has no specific section assignments, check department
-            faculty_depts = [d.strip() for d in (target_faculty.department or '').split(',') if d.strip()]
-            if branch not in faculty_depts:
-                return Response({"detail": "Faculty is not assigned to this department."}, status=403)
+        # Simplified validation - just check that faculty has a department
+        if not branch:
+            return Response({"detail": "Faculty must have a department assigned."}, status=400)
+        
+        # Allow faculty to create sessions for any subject they select
+        # The department and sections are auto-populated from faculty's profile
         
         # Create session
         start_time = timezone.now()
