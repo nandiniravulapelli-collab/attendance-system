@@ -983,18 +983,25 @@ export const FacultyLayout: React.FC = () => {
     }
 
     try {
+      const payload = {
+        subject: qrSessionForm.subject,
+        duration_minutes: qrSessionForm.duration_hours * 60
+      };
+      console.log('Starting QR session with payload:', payload);
+      
       const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          subject: qrSessionForm.subject,
-          duration_minutes: qrSessionForm.duration_hours * 60
-        })
+        body: JSON.stringify(payload)
       });
 
+      console.log('Response status:', res.status);
+      const responseText = await res.text();
+      console.log('Response text:', responseText);
+
       if (res.ok) {
-        const session = await res.json();
+        const session = JSON.parse(responseText);
         setQrSessionDialogOpen(false);
         setQrSessionForm({
           subject: '',
@@ -1003,7 +1010,13 @@ export const FacultyLayout: React.FC = () => {
         handleActivateQrSession(session.id);
         toast({ title: 'Session Started', description: 'QR attendance session is now active.' });
       } else {
-        const err = await res.json().catch(() => ({}));
+        let err = {};
+        try {
+          err = JSON.parse(responseText);
+        } catch {
+          err = { detail: responseText };
+        }
+        console.error('Error response:', err);
         toast({ title: 'Error', description: err.detail || 'Failed to start session.', variant: 'destructive' });
       }
     } catch (error) {

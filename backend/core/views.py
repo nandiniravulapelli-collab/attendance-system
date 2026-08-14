@@ -2016,6 +2016,8 @@ def sample_bulk_attendance_excel_view(request):
 @permission_classes([IsAuthenticated])
 def qr_attendance_sessions_view(request):
     """Create or list QR attendance sessions."""
+    print(f"QR Attendance Sessions View - Method: {request.method}, User: {request.user.username}, Role: {request.user.role}")
+    
     is_admin = request.user.role == 'admin' or request.user.is_superuser
     is_faculty = request.user.role == 'faculty'
     
@@ -2023,6 +2025,7 @@ def qr_attendance_sessions_view(request):
         return Response({"detail": "Faculty or admin only."}, status=403)
     
     if request.method == 'GET':
+        print(f"GET request for QR sessions")
         # List sessions
         if is_admin:
             sessions = QRAttendanceSession.objects.all()
@@ -2039,19 +2042,27 @@ def qr_attendance_sessions_view(request):
     
     elif request.method == 'POST':
         # Create new session
+        print(f"POST request to create QR session")
+        print(f"User: {request.user.username}, Role: {request.user.role}")
+        print(f"Request data: {request.data}")
+        
         # Admin can create sessions on behalf of faculty
         faculty_id = request.data.get('faculty_id')
         if is_admin and faculty_id:
             try:
                 target_faculty = User.objects.get(id=faculty_id, role='faculty')
+                print(f"Admin creating session for faculty: {target_faculty.username}")
             except User.DoesNotExist:
                 return Response({"detail": "Faculty not found."}, status=404)
         else:
             target_faculty = request.user
+            print(f"Faculty creating own session")
         
         data = request.data
         subject = data.get('subject')
         duration_minutes = data.get('duration_minutes', 10)
+        
+        print(f"Subject: {subject}, Duration: {duration_minutes}")
         
         if not subject:
             return Response({"detail": "Subject is required."}, status=400)
@@ -2062,6 +2073,9 @@ def qr_attendance_sessions_view(request):
         token_expires_at = start_time + datetime.timedelta(seconds=5)  # Initial token expires in 5 seconds
         
         try:
+            print(f"Creating session - Faculty: {target_faculty.username}, Subject: {subject}")
+            print(f"Start time: {start_time}, End time: {end_time}")
+            
             session = QRAttendanceSession.objects.create(
                 faculty=target_faculty,
                 subject=subject,
@@ -2074,6 +2088,12 @@ def qr_attendance_sessions_view(request):
                 current_qr_token=_generate_qr_token(),
                 token_expires_at=token_expires_at
             )
+            print(f"Session created successfully: {session.id}")
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Error creating QR session: {error_details}")
+            return Response({"detail": f"Failed to create session: {str(e)}"}, status=500)
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
