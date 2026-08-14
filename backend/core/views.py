@@ -2060,12 +2060,18 @@ def qr_attendance_sessions_view(request):
         
         data = request.data
         subject = data.get('subject')
+        custom_session_id = data.get('custom_session_id')
         duration_minutes = data.get('duration_minutes', 10)
         
-        print(f"Subject: {subject}, Duration: {duration_minutes}")
+        print(f"Subject: {subject}, Custom Session ID: {custom_session_id}, Duration: {duration_minutes}")
         
         if not subject:
             return Response({"detail": "Subject is required."}, status=400)
+        
+        # Validate custom session ID if provided
+        if custom_session_id:
+            if QRAttendanceSession.objects.filter(custom_session_id=custom_session_id).exists():
+                return Response({"detail": "This session ID is already in use."}, status=400)
         
         # Create session - no department/section needed
         start_time = timezone.now()
@@ -2086,7 +2092,8 @@ def qr_attendance_sessions_view(request):
                 duration_minutes=duration_minutes,
                 end_time=end_time,
                 current_qr_token=_generate_qr_token(),
-                token_expires_at=token_expires_at
+                token_expires_at=token_expires_at,
+                custom_session_id=custom_session_id if custom_session_id else None
             )
             print(f"Session created successfully: {session.id}")
         except Exception as e:

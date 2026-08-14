@@ -180,6 +180,7 @@ export const AdminLayout: React.FC = () => {
   const [adminQrCodeImage, setAdminQrCodeImage] = useState<string | null>(null);
   const [adminQrRefreshInterval, setAdminQrRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   const [adminQrSessionForm, setAdminQrSessionForm] = useState({
+    session_id: '',
     subject: '',
     duration_hours: 1,
     faculty_id: ''
@@ -1832,21 +1833,29 @@ export const AdminLayout: React.FC = () => {
       }
 
       // Create session on behalf of faculty (requires backend to handle this)
+      const payload: any = {
+        faculty_id: adminQrSessionForm.faculty_id,
+        subject: adminQrSessionForm.subject,
+        duration_minutes: adminQrSessionForm.duration_hours * 60
+      };
+      
+      // Add custom session ID if provided
+      if (adminQrSessionForm.session_id.trim()) {
+        payload.custom_session_id = adminQrSessionForm.session_id.trim();
+      }
+      
       const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          faculty_id: adminQrSessionForm.faculty_id,
-          subject: adminQrSessionForm.subject,
-          duration_minutes: adminQrSessionForm.duration_hours * 60
-        })
+        body: JSON.stringify(payload)
       });
 
       if (res.ok) {
         const session = await res.json();
         setAdminQrSessionDialogOpen(false);
         setAdminQrSessionForm({
+          session_id: '',
           subject: '',
           duration_hours: 1,
           faculty_id: ''
@@ -3729,20 +3738,14 @@ export const AdminLayout: React.FC = () => {
                           <h3 className="text-lg font-semibold mb-4">Active Session</h3>
                           <div className="space-y-2">
                             <div className="flex justify-between">
+                              <span className="text-sm text-muted-foreground">Session ID:</span>
+                              <span className="font-medium text-blue-600">
+                                {(adminActiveQrSession as any).custom_session_id || adminActiveQrSession.id}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Subject:</span>
                               <span className="font-medium">{adminActiveQrSession.subject}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-sm text-muted-foreground">Year:</span>
-                              <span className="font-medium">{adminActiveQrSession.year}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-sm text-muted-foreground">Branch(es):</span>
-                              <span className="font-medium">{adminActiveQrSession.branches || adminActiveQrSession.branch}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-sm text-muted-foreground">Sections:</span>
-                              <span className="font-medium">{adminActiveQrSession.sections}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Duration:</span>
@@ -3798,11 +3801,9 @@ export const AdminLayout: React.FC = () => {
                         <table className="w-full">
                           <thead className="bg-muted">
                             <tr>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Session ID</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Faculty</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Subject</th>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Year</th>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Branch(es)</th>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Sections</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Duration (hours)</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Attendance</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Status</th>
@@ -3810,13 +3811,13 @@ export const AdminLayout: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {adminQrSessions.map((session) => (
+                            {adminQrSessions.map((session: any) => (
                               <tr key={session.id} className="border-t hover:bg-muted/50">
+                                <td className="px-4 py-2 text-sm font-medium text-blue-600">
+                                  {session.custom_session_id || session.id}
+                                </td>
                                 <td className="px-4 py-2 text-sm">{session.faculty_name}</td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
-                                <td className="px-4 py-2 text-sm">{session.year}</td>
-                                <td className="px-4 py-2 text-sm">{session.branches || session.branch}</td>
-                                <td className="px-4 py-2 text-sm">{session.sections}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
                                 <td className="px-4 py-2 text-sm">{session.attendance_count}</td>
                                 <td className="px-4 py-2 text-sm">
@@ -5046,6 +5047,16 @@ export const AdminLayout: React.FC = () => {
                 <DialogDescription>Configure the attendance session parameters</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="admin-qr-session-id">Session ID (Optional)</Label>
+                  <Input
+                    id="admin-qr-session-id"
+                    type="text"
+                    placeholder="Leave blank for auto-generated ID"
+                    value={adminQrSessionForm.session_id}
+                    onChange={(e) => setAdminQrSessionForm({...adminQrSessionForm, session_id: e.target.value})}
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="admin-qr-faculty">Faculty *</Label>
                   <Select value={adminQrSessionForm.faculty_id} onValueChange={(value) => setAdminQrSessionForm({...adminQrSessionForm, faculty_id: value})}>
