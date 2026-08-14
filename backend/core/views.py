@@ -81,6 +81,7 @@ def _generate_qr_code_base64(token: str, session_id: int) -> str:
     """Generate QR code as base64 encoded image with session information."""
     # Embed session information in the QR code
     qr_data = f"{session_id}:{token}"
+    print(f"Generating QR code with data: {qr_data}")
     
     qr = qrcode.QRCode(
         version=1,
@@ -98,6 +99,7 @@ def _generate_qr_code_base64(token: str, session_id: int) -> str:
     img.save(buffer, format='PNG')
     img_str = base64.b64encode(buffer.getvalue()).decode()
     
+    print(f"QR code generated successfully for session {session_id}")
     return f"data:image/png;base64,{img_str}"
 
 

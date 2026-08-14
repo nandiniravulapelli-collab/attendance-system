@@ -506,11 +506,42 @@ export const StudentLayout: React.FC = () => {
   };
 
   const handleQrScan = (result: any) => {
+    console.log('QR Scan result:', result);
     if (result) {
-      const qrData = result.text || result;
+      // Handle different result formats from different QR scanner libraries
+      let qrData = '';
+      if (typeof result === 'string') {
+        qrData = result;
+      } else if (result.text) {
+        qrData = result.text;
+      } else if (result.data) {
+        qrData = result.data;
+      } else if (result.rawValue) {
+        qrData = result.rawValue;
+      }
+      
+      console.log('Extracted QR data:', qrData);
+      
+      if (!qrData) {
+        console.error('No QR data extracted from result');
+        toast({ title: 'Scan Error', description: 'Could not read QR code data. Please try again.', variant: 'destructive' });
+        return;
+      }
+      
       // Parse the QR data to extract session ID
-      const sessionId = qrData.split(':')[0]; // Extract session ID from "session_id:token"
-      handleQrMarkAttendance(sessionId);
+      // Expected format: "session_id:token"
+      const parts = qrData.split(':');
+      const sessionId = parts[0]; // Extract session ID
+      
+      console.log('Extracted session ID:', sessionId);
+      
+      if (!sessionId || isNaN(parseInt(sessionId))) {
+        console.error('Invalid session ID from QR:', sessionId);
+        toast({ title: 'Invalid QR Code', description: 'This QR code is not valid for attendance. Please use the current session QR code.', variant: 'destructive' });
+        return;
+      }
+      
+      handleQrMarkAttendance(qrData);
     }
   };
 
@@ -1260,7 +1291,10 @@ export const StudentLayout: React.FC = () => {
                       {!cameraError ? (
                         <div className="w-full h-full">
                           <QrScanner
-                            onResult={handleQrScan}
+                            onResult={(result) => {
+                              console.log('QR Scanner result detected:', result);
+                              handleQrScan(result);
+                            }}
                             onError={handleQrError}
                             constraints={{
                               audio: false,
@@ -1268,6 +1302,7 @@ export const StudentLayout: React.FC = () => {
                             }}
                             videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             containerStyle={{ width: '100%', height: '100%' }}
+                            scanDelay={500}
                           />
                         </div>
                       ) : (
