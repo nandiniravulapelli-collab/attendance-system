@@ -1119,6 +1119,37 @@ export const FacultyLayout: React.FC = () => {
     }
   };
 
+  const handleDeleteQrSession = async (sessionId: number) => {
+    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`), {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (res.ok) {
+        // Clear active session if it was the deleted one
+        if (activeQrSession && activeQrSession.id === sessionId) {
+          if (qrRefreshInterval) {
+            clearInterval(qrRefreshInterval);
+            setQrRefreshInterval(null);
+          }
+          setActiveQrSession(null);
+          setQrCodeImage(null);
+        }
+        loadQrSessions();
+        toast({ title: 'Session Deleted', description: 'QR attendance session has been deleted.' });
+      } else {
+        toast({ title: 'Error', description: 'Failed to delete session.', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
   const loadQrSessions = async () => {
     try {
       const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
@@ -1870,15 +1901,24 @@ export const FacultyLayout: React.FC = () => {
                                   </Badge>
                                 </td>
                                 <td className="px-4 py-2 text-sm">
-                                  {session.is_active && (
+                                  <div className="flex gap-2">
+                                    {session.is_active && (
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => handleActivateQrSession(session.id)}
+                                      >
+                                        View
+                                      </Button>
+                                    )}
                                     <Button 
-                                      variant="outline" 
+                                      variant="destructive" 
                                       size="sm"
-                                      onClick={() => handleActivateQrSession(session.id)}
+                                      onClick={() => handleDeleteQrSession(session.id)}
                                     >
-                                      View
+                                      Delete
                                     </Button>
-                                  )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}
