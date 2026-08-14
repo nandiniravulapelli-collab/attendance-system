@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,7 +41,7 @@ import {
   Scan,
   Camera
 } from 'lucide-react';
-import QrScanner from 'react-qr-scanner';
+import { Html5Qrcode } from 'html5-qrcode';
 import { db } from '@/lib/mockDb';
 import { toast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/api';
@@ -85,6 +85,8 @@ export const StudentLayout: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
+  const qrScannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerElementId = 'qr-scanner';
 
   const numericId = user?.id && /^\d+$/.test(String(user.id)) ? Number(user.id) : null;
   useEffect(() => {
@@ -505,44 +507,35 @@ export const StudentLayout: React.FC = () => {
     }
   };
 
-  const handleQrScan = (result: any) => {
-    console.log('QR Scan result:', result);
-    if (result) {
-      // Handle different result formats from different QR scanner libraries
-      let qrData = '';
-      if (typeof result === 'string') {
-        qrData = result;
-      } else if (result.text) {
-        qrData = result.text;
-      } else if (result.data) {
-        qrData = result.data;
-      } else if (result.rawValue) {
-        qrData = result.rawValue;
-      }
-      
-      console.log('Extracted QR data:', qrData);
-      
-      if (!qrData) {
-        console.error('No QR data extracted from result');
-        toast({ title: 'Scan Error', description: 'Could not read QR code data. Please try again.', variant: 'destructive' });
-        return;
-      }
-      
-      // Parse the QR data to extract session ID
-      // Expected format: "session_id:token"
-      const parts = qrData.split(':');
-      const sessionId = parts[0]; // Extract session ID
-      
-      console.log('Extracted session ID:', sessionId);
-      
-      if (!sessionId || isNaN(parseInt(sessionId))) {
-        console.error('Invalid session ID from QR:', sessionId);
-        toast({ title: 'Invalid QR Code', description: 'This QR code is not valid for attendance. Please use the current session QR code.', variant: 'destructive' });
-        return;
-      }
-      
-      handleQrMarkAttendance(qrData);
+  const handleQrScan = (decodedText: string) => {
+    console.log('QR Scan result:', decodedText);
+    
+    if (!decodedText) {
+      console.error('No QR data extracted from result');
+      toast({ title: 'Scan Error', description: 'Could not read QR code data. Please try again.', variant: 'destructive' });
+      return;
     }
+    
+    // Parse the QR data to extract session ID
+    // Expected format: "session_id:token"
+    const parts = decodedText.split(':');
+    const sessionId = parts[0]; // Extract session ID
+    
+    console.log('Extracted session ID:', sessionId);
+    
+    if (!sessionId || isNaN(parseInt(sessionId))) {
+      console.error('Invalid session ID from QR:', sessionId);
+      toast({ title: 'Invalid QR Code', description: 'This QR code is not valid for attendance. Please use the current session QR code.', variant: 'destructive' });
+      return;
+    }
+    
+    // Stop scanning after successful detection
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop().catch(console.error);
+      qrScannerRef.current = null;
+    }
+    
+    handleQrMarkAttendance(decodedText);
   };
 
   const handleQrError = (error: any) => {
@@ -564,6 +557,55 @@ export const StudentLayout: React.FC = () => {
     setCameraError(errorMessage);
     setShowManualEntry(true);
   };
+
+  // QR Scanner initialization and cleanup
+  useEffect(() => {
+    if (qrScanningOpen && !showManualEntry) {
+      const startScanner = async () => {
+        try {
+          console.log('Starting QR scanner...');
+          const html5QrCode = new Html5Qrcode(scannerElementId);
+          qrScannerRef.current = html5QrCode;
+          
+          const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+          
+          await html5QrCode.start(
+            { facingMode: "environment" },
+            config,
+            (decodedText) => {
+              console.log('QR Code detected:', decodedText);
+              handleQrScan(decodedText);
+            },
+            (errorMessage) => {
+              // Don't log frame errors to avoid console spam
+              // console.log('QR Scanner error:', errorMessage);
+            }
+          );
+          
+          console.log('QR scanner started successfully');
+          setCameraError(null);
+        } catch (error) {
+          console.error('Failed to start QR scanner:', error);
+          setCameraError('Failed to start camera. Please use manual entry.');
+          setShowManualEntry(true);
+        }
+      };
+      
+      startScanner();
+      
+      return () => {
+        if (qrScannerRef.current) {
+          console.log('Stopping QR scanner...');
+          qrScannerRef.current.stop().catch(console.error);
+          qrScannerRef.current = null;
+        }
+      };
+    } else if (qrScannerRef.current) {
+      // Stop scanner when dialog closes
+      qrScannerRef.current.stop().catch(console.error);
+      qrScannerRef.current = null;
+    }
+  }, [qrScanningOpen, showManualEntry]);
 
   // Generate device ID on mount
   useEffect(() => {
@@ -1289,22 +1331,7 @@ export const StudentLayout: React.FC = () => {
                   <>
                     <div className="bg-black rounded-lg aspect-square flex items-center justify-center overflow-hidden relative">
                       {!cameraError ? (
-                        <div className="w-full h-full">
-                          <QrScanner
-                            onResult={(result) => {
-                              console.log('QR Scanner result detected:', result);
-                              handleQrScan(result);
-                            }}
-                            onError={handleQrError}
-                            constraints={{
-                              audio: false,
-                              video: { facingMode: 'environment' }
-                            }}
-                            videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            containerStyle={{ width: '100%', height: '100%' }}
-                            scanDelay={500}
-                          />
-                        </div>
+                        <div id={scannerElementId} className="w-full h-full"></div>
                       ) : (
                         <div className="text-center text-white p-4">
                           <Camera className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -1323,6 +1350,10 @@ export const StudentLayout: React.FC = () => {
                       variant="outline" 
                       onClick={() => {
                         console.log('Use Manual Entry clicked');
+                        if (qrScannerRef.current) {
+                          qrScannerRef.current.stop().catch(console.error);
+                          qrScannerRef.current = null;
+                        }
                         setShowManualEntry(true);
                       }}
                       className="w-full"
