@@ -204,7 +204,7 @@ class QRAttendanceSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = QRAttendanceSession
         fields = (
-            'id', 'faculty', 'faculty_name', 'subject', 'year', 'branch', 'sections',
+            'id', 'faculty', 'faculty_name', 'subject', 'year', 'branch', 'branches', 'sections',
             'duration_minutes', 'start_time', 'end_time', 'is_active', 
             'current_qr_token', 'token_expires_at', 'token_refresh_interval',
             'attendance_count', 'is_expired'
