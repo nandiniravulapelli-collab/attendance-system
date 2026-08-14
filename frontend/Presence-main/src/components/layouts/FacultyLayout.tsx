@@ -174,7 +174,6 @@ export const FacultyLayout: React.FC = () => {
   const [qrCodeImage, setQrCodeImage] = useState<string | null>(null);
   const [qrRefreshInterval, setQrRefreshInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [qrSessionForm, setQrSessionForm] = useState({
-    session_id: '',
     subject: '',
     duration_hours: 1
   });
@@ -989,11 +988,6 @@ export const FacultyLayout: React.FC = () => {
         duration_minutes: qrSessionForm.duration_hours * 60
       };
       
-      // Add custom session ID if provided
-      if (qrSessionForm.session_id.trim()) {
-        payload.custom_session_id = qrSessionForm.session_id.trim();
-      }
-      
       console.log('Starting QR session with payload:', payload);
       
       const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
@@ -1011,7 +1005,6 @@ export const FacultyLayout: React.FC = () => {
         const session = JSON.parse(responseText);
         setQrSessionDialogOpen(false);
         setQrSessionForm({
-          session_id: '',
           subject: '',
           duration_hours: 1
         });
@@ -1782,14 +1775,13 @@ export const FacultyLayout: React.FC = () => {
                               <span className="text-sm text-muted-foreground">Session ID:</span>
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-blue-600">
-                                  {(activeQrSession as any).custom_session_id || activeQrSession.id}
+                                  {activeQrSession.id}
                                 </span>
                                 <Button 
                                   variant="ghost" 
                                   size="sm"
                                   onClick={() => {
-                                    const sessionId = (activeQrSession as any).custom_session_id || activeQrSession.id;
-                                    navigator.clipboard.writeText(String(sessionId));
+                                    navigator.clipboard.writeText(String(activeQrSession.id));
                                     toast({ title: 'Copied', description: 'Session ID copied to clipboard' });
                                   }}
                                 >
@@ -1867,7 +1859,7 @@ export const FacultyLayout: React.FC = () => {
                             {qrSessions.map((session: any) => (
                               <tr key={session.id} className="border-t hover:bg-muted/50">
                                 <td className="px-4 py-2 text-sm font-medium text-blue-600">
-                                {session.custom_session_id || session.id}
+                                {session.id}
                               </td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
@@ -2464,16 +2456,6 @@ export const FacultyLayout: React.FC = () => {
                 <DialogDescription>Configure the attendance session parameters</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="qr-session-id">Session ID (Optional)</Label>
-                  <Input
-                    id="qr-session-id"
-                    type="text"
-                    placeholder="Leave blank for auto-generated ID"
-                    value={qrSessionForm.session_id}
-                    onChange={(e) => setQrSessionForm({...qrSessionForm, session_id: e.target.value})}
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="qr-subject">Subject *</Label>
                   <Select value={qrSessionForm.subject} onValueChange={(value) => setQrSessionForm({...qrSessionForm, subject: value})}>

@@ -180,7 +180,6 @@ export const AdminLayout: React.FC = () => {
   const [adminQrCodeImage, setAdminQrCodeImage] = useState<string | null>(null);
   const [adminQrRefreshInterval, setAdminQrRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   const [adminQrSessionForm, setAdminQrSessionForm] = useState({
-    session_id: '',
     subject: '',
     duration_hours: 1,
     faculty_id: ''
@@ -1839,11 +1838,6 @@ export const AdminLayout: React.FC = () => {
         duration_minutes: adminQrSessionForm.duration_hours * 60
       };
       
-      // Add custom session ID if provided
-      if (adminQrSessionForm.session_id.trim()) {
-        payload.custom_session_id = adminQrSessionForm.session_id.trim();
-      }
-      
       const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1855,7 +1849,6 @@ export const AdminLayout: React.FC = () => {
         const session = await res.json();
         setAdminQrSessionDialogOpen(false);
         setAdminQrSessionForm({
-          session_id: '',
           subject: '',
           duration_hours: 1,
           faculty_id: ''
@@ -3738,12 +3731,6 @@ export const AdminLayout: React.FC = () => {
                           <h3 className="text-lg font-semibold mb-4">Active Session</h3>
                           <div className="space-y-2">
                             <div className="flex justify-between">
-                              <span className="text-sm text-muted-foreground">Session ID:</span>
-                              <span className="font-medium text-blue-600">
-                                {(adminActiveQrSession as any).custom_session_id || adminActiveQrSession.id}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
                               <span className="text-sm text-muted-foreground">Subject:</span>
                               <span className="font-medium">{adminActiveQrSession.subject}</span>
                             </div>
@@ -3801,7 +3788,6 @@ export const AdminLayout: React.FC = () => {
                         <table className="w-full">
                           <thead className="bg-muted">
                             <tr>
-                              <th className="px-4 py-2 text-left text-sm font-medium">Session ID</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Faculty</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Subject</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Duration (hours)</th>
@@ -3813,9 +3799,6 @@ export const AdminLayout: React.FC = () => {
                           <tbody>
                             {adminQrSessions.map((session: any) => (
                               <tr key={session.id} className="border-t hover:bg-muted/50">
-                                <td className="px-4 py-2 text-sm font-medium text-blue-600">
-                                  {session.custom_session_id || session.id}
-                                </td>
                                 <td className="px-4 py-2 text-sm">{session.faculty_name}</td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
@@ -5047,16 +5030,6 @@ export const AdminLayout: React.FC = () => {
                 <DialogDescription>Configure the attendance session parameters</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="admin-qr-session-id">Session ID (Optional)</Label>
-                  <Input
-                    id="admin-qr-session-id"
-                    type="text"
-                    placeholder="Leave blank for auto-generated ID"
-                    value={adminQrSessionForm.session_id}
-                    onChange={(e) => setAdminQrSessionForm({...adminQrSessionForm, session_id: e.target.value})}
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="admin-qr-faculty">Faculty *</Label>
                   <Select value={adminQrSessionForm.faculty_id} onValueChange={(value) => setAdminQrSessionForm({...adminQrSessionForm, faculty_id: value})}>
