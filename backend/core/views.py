@@ -2051,52 +2051,24 @@ def qr_attendance_sessions_view(request):
         
         data = request.data
         subject = data.get('subject')
-        year = data.get('year')
-        branch = data.get('branch')
-        sections = data.get('sections', [])
         duration_minutes = data.get('duration_minutes', 10)
         
-        # Use faculty's department and year if not provided
-        if not year:
-            year = target_faculty.year or '1'
-        if not branch:
-            branch = target_faculty.department or ''
-        if not sections or len(sections) == 0:
-            # Get faculty's sections
-            faculty_sections = []
-            if hasattr(target_faculty, 'sections') and target_faculty.sections:
-                faculty_sections = target_faculty.sections
-            elif hasattr(target_faculty, 'section') and target_faculty.section:
-                faculty_sections = [target_faculty.section]
-            sections = faculty_sections if faculty_sections else ['A']
-        
-        if not all([subject, year, branch, sections]):
+        if not subject:
             return Response({"detail": "Subject is required."}, status=400)
         
-        if isinstance(sections, str):
-            sections = [s.strip() for s in sections.split(',') if s.strip()]
-        
-        # Simplified validation - just check that faculty has a department
-        if not branch:
-            return Response({"detail": "Faculty must have a department assigned."}, status=400)
-        
-        # Allow faculty to create sessions for any subject they select
-        # The department and sections are auto-populated from faculty's profile
-        
-        # Create session
+        # Create session - no department/section needed
         start_time = timezone.now()
         end_time = start_time + datetime.timedelta(minutes=duration_minutes)
         token_expires_at = start_time + datetime.timedelta(seconds=5)  # Initial token expires in 5 seconds
         
-        # Create session with branches field
         try:
             session = QRAttendanceSession.objects.create(
                 faculty=target_faculty,
                 subject=subject,
-                year=year,
-                branch=branch,
-                branches=branch,  # Use branch as default for branches field
-                sections=','.join(sections),
+                year='1',  # Default, not used
+                branch='CSM',  # Default, not used
+                branches='CSM',  # Default, not used
+                sections='A',  # Default, not used
                 duration_minutes=duration_minutes,
                 end_time=end_time,
                 current_qr_token=_generate_qr_token(),
@@ -2217,27 +2189,7 @@ def qr_attendance_mark_view(request):
         if session.current_qr_token != qr_token:
             return Response({"detail": "Invalid QR code."}, status=403)
     
-    # Check if student belongs to the correct year, branch, and section
-    if request.user.year != session.year:
-        return Response({"detail": "You are not in the correct year for this session."}, status=403)
-    
-    # Check if student belongs to any of the allowed branches
-    session_branches = [b.strip() for b in session.branches.split(',') if b.strip()] if session.branches else [session.branch]
-    if request.user.department not in session_branches:
-        return Response({"detail": "You are not in the correct branch for this session."}, status=403)
-    
-    session_sections = [s.strip() for s in session.sections.split(',') if s.strip()]
-    # Handle both old and new user models
-    if hasattr(request.user, 'sections') and request.user.sections:
-        student_sections = request.user.sections
-    elif hasattr(request.user, 'section') and request.user.section:
-        student_sections = [request.user.section]
-    else:
-        student_sections = []
-    
-    # Check if student is in any of the allowed sections
-    if not any(section in session_sections for section in student_sections):
-        return Response({"detail": "You are not in the correct section for this session."}, status=403)
+    # Remove all department/section/year validations - any student can attend any session
     
     # Check if student already marked attendance for this session
     if QRAttendanceRecord.objects.filter(session=session, student=request.user).exists():
