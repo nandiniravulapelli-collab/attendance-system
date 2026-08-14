@@ -177,6 +177,12 @@ export const FacultyLayout: React.FC = () => {
     subject: '',
     duration_hours: 1
   });
+  const [manualSessionDialogOpen, setManualSessionDialogOpen] = useState(false);
+  const [manualSessionForm, setManualSessionForm] = useState({
+    subject: '',
+    duration_hours: 1,
+    manual_session_id: ''
+  });
   const [qrSessionDialogOpen, setQrSessionDialogOpen] = useState(false);
   const [qrAttendanceRecords, setQrAttendanceRecords] = useState<Array<any>>([]);
 
@@ -1150,6 +1156,57 @@ export const FacultyLayout: React.FC = () => {
     }
   };
 
+  const handleManualSession = async () => {
+    if (!manualSessionForm.subject || !manualSessionForm.manual_session_id) {
+      toast({ title: 'Validation Error', description: 'Please fill in all required fields.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const payload: any = {
+        subject: manualSessionForm.subject,
+        duration_minutes: manualSessionForm.duration_hours * 60,
+        manual_session_id: manualSessionForm.manual_session_id
+      };
+      
+      console.log('Creating manual session with payload:', payload);
+      
+      const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+
+      console.log('Response status:', res.status);
+      const responseText = await res.text();
+      console.log('Response text:', responseText);
+
+      if (res.ok) {
+        const session = JSON.parse(responseText);
+        setManualSessionDialogOpen(false);
+        setManualSessionForm({
+          subject: '',
+          duration_hours: 1,
+          manual_session_id: ''
+        });
+        toast({ title: 'Session Created', description: `Manual session with ID ${manualSessionForm.manual_session_id} created successfully.` });
+        loadQrSessions();
+      } else {
+        let err: any = {};
+        try {
+          err = JSON.parse(responseText);
+        } catch {
+          err = { detail: responseText };
+        }
+        console.error('Error response:', err);
+        toast({ title: 'Error', description: err.detail || 'Failed to create manual session.', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
   const loadQrSessions = async () => {
     try {
       const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
@@ -1788,10 +1845,16 @@ export const FacultyLayout: React.FC = () => {
                   <CardTitle>QR Attendance</CardTitle>
                   <CardDescription>Start QR-based attendance sessions for quick student check-in</CardDescription>
                 </div>
-                <Button onClick={() => setQrSessionDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Start New Session
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={() => setQrSessionDialogOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Start New Session
+                  </Button>
+                  <Button onClick={() => setManualSessionDialogOpen(true)} variant="outline">
+                    <Edit className="w-4 h-4 mr-2" />
+                    Manual Session ID
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {activeQrSession ? (
@@ -1806,13 +1869,14 @@ export const FacultyLayout: React.FC = () => {
                               <span className="text-sm text-muted-foreground">Session ID:</span>
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-blue-600">
-                                  {activeQrSession.id}
+                                  {activeQrSession.manual_session_id || activeQrSession.id}
                                 </span>
                                 <Button 
                                   variant="ghost" 
                                   size="sm"
                                   onClick={() => {
-                                    navigator.clipboard.writeText(String(activeQrSession.id));
+                                    const sessionId = activeQrSession.manual_session_id || activeQrSession.id;
+                                    navigator.clipboard.writeText(String(sessionId));
                                     toast({ title: 'Copied', description: 'Session ID copied to clipboard' });
                                   }}
                                 >
@@ -1890,7 +1954,7 @@ export const FacultyLayout: React.FC = () => {
                             {qrSessions.map((session: any) => (
                               <tr key={session.id} className="border-t hover:bg-muted/50">
                                 <td className="px-4 py-2 text-sm font-medium text-blue-600">
-                                {session.id}
+                                {session.manual_session_id || session.id}
                               </td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
@@ -2527,6 +2591,60 @@ export const FacultyLayout: React.FC = () => {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setQrSessionDialogOpen(false)}>Cancel</Button>
                 <Button onClick={handleStartQrSession}>Start Session</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Manual Session ID Dialog */}
+          <Dialog open={manualSessionDialogOpen} onOpenChange={setManualSessionDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create Manual Session ID</DialogTitle>
+                <DialogDescription>Create a session with a custom ID for manual student entry</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="manual-session-id">Session ID *</Label>
+                  <Input
+                    id="manual-session-id"
+                    type="text"
+                    placeholder="Enter custom session ID (e.g., CLASS101)"
+                    value={manualSessionForm.manual_session_id}
+                    onChange={(e) => setManualSessionForm({...manualSessionForm, manual_session_id: e.target.value})}
+                  />
+                  <p className="text-xs text-muted-foreground">Students will use this ID to mark attendance manually</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-subject">Subject *</Label>
+                  <Select value={manualSessionForm.subject} onValueChange={(value) => setManualSessionForm({...manualSessionForm, subject: value})}>
+                    <SelectTrigger id="manual-subject">
+                      <SelectValue placeholder="Select subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {subjectsAll.map((subject) => (
+                        <SelectItem key={subject.id} value={subject.code}>
+                          {subject.code} - {subject.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-duration">Duration (hours) *</Label>
+                  <Input
+                    id="manual-duration"
+                    type="number"
+                    min="1"
+                    max="24"
+                    step="0.5"
+                    value={manualSessionForm.duration_hours}
+                    onChange={(e) => setManualSessionForm({...manualSessionForm, duration_hours: parseFloat(e.target.value) || 1})}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setManualSessionDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleManualSession}>Create Session</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

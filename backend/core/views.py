@@ -2062,12 +2062,18 @@ def qr_attendance_sessions_view(request):
         
         data = request.data
         subject = data.get('subject')
+        manual_session_id = data.get('manual_session_id')
         duration_minutes = data.get('duration_minutes', 10)
         
-        print(f"Subject: {subject}, Duration: {duration_minutes}")
+        print(f"Subject: {subject}, Manual Session ID: {manual_session_id}, Duration: {duration_minutes}")
         
         if not subject:
             return Response({"detail": "Subject is required."}, status=400)
+        
+        # Validate manual session ID if provided
+        if manual_session_id:
+            if QRAttendanceSession.objects.filter(manual_session_id=manual_session_id).exists():
+                return Response({"detail": "This session ID is already in use."}, status=400)
         
         # Create session - no department/section needed
         start_time = timezone.now()
@@ -2088,7 +2094,8 @@ def qr_attendance_sessions_view(request):
                 duration_minutes=duration_minutes,
                 end_time=end_time,
                 current_qr_token=_generate_qr_token(),
-                token_expires_at=token_expires_at
+                token_expires_at=token_expires_at,
+                manual_session_id=manual_session_id if manual_session_id else None
             )
             print(f"Session created successfully: {session.id}")
         except Exception as e:
@@ -2179,20 +2186,25 @@ def qr_attendance_mark_view(request):
     if not all([session_id, device_id]):
         return Response({"detail": "Session ID and device ID are required."}, status=400)
     
-    # Convert session_id to integer
+    # Check if session_id is a manual session ID (string) or numeric ID
     try:
-        session_id = int(session_id)
+        # Try to convert to integer first
+        session_id_int = int(session_id)
+        # If successful, look up by numeric ID
+        try:
+            session = QRAttendanceSession.objects.get(id=session_id_int)
+        except QRAttendanceSession.DoesNotExist:
+            return Response({"detail": "Invalid session."}, status=404)
     except (ValueError, TypeError):
-        return Response({"detail": "Invalid session ID format."}, status=400)
+        # If conversion fails, look up by manual_session_id
+        try:
+            session = QRAttendanceSession.objects.get(manual_session_id=session_id)
+        except QRAttendanceSession.DoesNotExist:
+            return Response({"detail": "Invalid session ID."}, status=404)
     
     # Only students can mark attendance
     if request.user.role != 'student':
         return Response({"detail": "Only students can mark attendance."}, status=403)
-    
-    try:
-        session = QRAttendanceSession.objects.get(id=session_id)
-    except QRAttendanceSession.DoesNotExist:
-        return Response({"detail": "Invalid session."}, status=404)
     
     # Check if session is active
     if not session.is_active:

@@ -184,6 +184,13 @@ export const AdminLayout: React.FC = () => {
     duration_hours: 1,
     faculty_id: ''
   });
+  const [adminManualSessionDialogOpen, setAdminManualSessionDialogOpen] = useState(false);
+  const [adminManualSessionForm, setAdminManualSessionForm] = useState({
+    subject: '',
+    duration_hours: 1,
+    faculty_id: '',
+    manual_session_id: ''
+  });
   const [adminQrSessionDialogOpen, setAdminQrSessionDialogOpen] = useState(false);
   const [adminQrAttendanceRecords, setAdminQrAttendanceRecords] = useState<Array<any>>([]);
 
@@ -1905,6 +1912,47 @@ export const AdminLayout: React.FC = () => {
         setAdminQrRefreshInterval(interval);
       } else {
         toast({ title: 'Error', description: 'Failed to load session.', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
+    }
+  };
+
+  const handleAdminManualSession = async () => {
+    if (!adminManualSessionForm.faculty_id || !adminManualSessionForm.subject || !adminManualSessionForm.manual_session_id) {
+      toast({ title: 'Validation Error', description: 'Please fill in all required fields.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const payload: any = {
+        faculty_id: adminManualSessionForm.faculty_id,
+        subject: adminManualSessionForm.subject,
+        duration_minutes: adminManualSessionForm.duration_hours * 60,
+        manual_session_id: adminManualSessionForm.manual_session_id
+      };
+      
+      const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const session = await res.json();
+        setAdminManualSessionDialogOpen(false);
+        setAdminManualSessionForm({
+          subject: '',
+          duration_hours: 1,
+          faculty_id: '',
+          manual_session_id: ''
+        });
+        toast({ title: 'Session Created', description: `Manual session with ID ${adminManualSessionForm.manual_session_id} created successfully.` });
+        loadAdminQrSessions();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: 'Error', description: err.detail || 'Failed to create manual session.', variant: 'destructive' });
       }
     } catch (error) {
       toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
@@ -3747,10 +3795,16 @@ export const AdminLayout: React.FC = () => {
                   <CardTitle>QR Attendance Management</CardTitle>
                   <CardDescription>View and manage QR attendance sessions for all faculty</CardDescription>
                 </div>
-                <Button onClick={() => setAdminQrSessionDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Start New Session
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={() => setAdminQrSessionDialogOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Start New Session
+                  </Button>
+                  <Button onClick={() => setAdminManualSessionDialogOpen(true)} variant="outline">
+                    <Edit className="w-4 h-4 mr-2" />
+                    Manual Session ID
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {adminActiveQrSession ? (
@@ -3819,6 +3873,7 @@ export const AdminLayout: React.FC = () => {
                         <table className="w-full">
                           <thead className="bg-muted">
                             <tr>
+                              <th className="px-4 py-2 text-left text-sm font-medium">Session ID</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Faculty</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Subject</th>
                               <th className="px-4 py-2 text-left text-sm font-medium">Duration (hours)</th>
@@ -3830,6 +3885,9 @@ export const AdminLayout: React.FC = () => {
                           <tbody>
                             {adminQrSessions.map((session: any) => (
                               <tr key={session.id} className="border-t hover:bg-muted/50">
+                                <td className="px-4 py-2 text-sm font-medium text-blue-600">
+                                  {session.manual_session_id || session.id}
+                                </td>
                                 <td className="px-4 py-2 text-sm">{session.faculty_name}</td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
@@ -5116,6 +5174,75 @@ export const AdminLayout: React.FC = () => {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAdminQrSessionDialogOpen(false)}>Cancel</Button>
                 <Button onClick={handleAdminStartQrSession}>Start Session</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Manual Session ID Dialog */}
+          <Dialog open={adminManualSessionDialogOpen} onOpenChange={setAdminManualSessionDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create Manual Session ID</DialogTitle>
+                <DialogDescription>Create a session with a custom ID for manual student entry</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="admin-manual-session-id">Session ID *</Label>
+                  <Input
+                    id="admin-manual-session-id"
+                    type="text"
+                    placeholder="Enter custom session ID (e.g., CLASS101)"
+                    value={adminManualSessionForm.manual_session_id}
+                    onChange={(e) => setAdminManualSessionForm({...adminManualSessionForm, manual_session_id: e.target.value})}
+                  />
+                  <p className="text-xs text-muted-foreground">Students will use this ID to mark attendance manually</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="admin-manual-faculty">Faculty *</Label>
+                  <Select value={adminManualSessionForm.faculty_id} onValueChange={(value) => setAdminManualSessionForm({...adminManualSessionForm, faculty_id: value})}>
+                    <SelectTrigger id="admin-manual-faculty">
+                      <SelectValue placeholder="Select faculty" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {apiFaculty.filter(f => f.role === 'faculty').map((faculty) => (
+                        <SelectItem key={faculty.id} value={String(faculty.id)}>
+                          {faculty.full_name || faculty.username}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="admin-manual-subject">Subject *</Label>
+                  <Select value={adminManualSessionForm.subject} onValueChange={(value) => setAdminManualSessionForm({...adminManualSessionForm, subject: value})}>
+                    <SelectTrigger id="admin-manual-subject">
+                      <SelectValue placeholder="Select subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {apiSubjects.map((subject) => (
+                        <SelectItem key={subject.id} value={subject.code}>
+                          {subject.code} - {subject.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="admin-manual-duration">Duration (hours) *</Label>
+                  <Input
+                    id="admin-manual-duration"
+                    type="number"
+                    min="1"
+                    max="24"
+                    step="0.5"
+                    value={adminManualSessionForm.duration_hours}
+                    onChange={(e) => setAdminManualSessionForm({...adminManualSessionForm, duration_hours: parseFloat(e.target.value) || 1})}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setAdminManualSessionDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleAdminManualSession}>Create Session</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
