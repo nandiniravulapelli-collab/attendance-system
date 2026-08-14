@@ -2088,13 +2088,14 @@ def qr_attendance_sessions_view(request):
         end_time = start_time + datetime.timedelta(minutes=duration_minutes)
         token_expires_at = start_time + datetime.timedelta(seconds=5)  # Initial token expires in 5 seconds
         
-        # Create session with simple approach (no branches field)
+        # Create session with branches field
         try:
             session = QRAttendanceSession.objects.create(
                 faculty=target_faculty,
                 subject=subject,
                 year=year,
                 branch=branch,
+                branches=branch,  # Use branch as default for branches field
                 sections=','.join(sections),
                 duration_minutes=duration_minutes,
                 end_time=end_time,

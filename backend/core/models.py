@@ -114,6 +114,7 @@ class QRAttendanceSession(models.Model):
     subject = models.CharField(max_length=100)
     year = models.CharField(max_length=20)
     branch = models.CharField(max_length=100)
+    branches = models.CharField(max_length=500, default='', blank=True, help_text='Comma-separated branch codes')
     sections = models.CharField(max_length=500, help_text='Comma-separated section names')
     duration_minutes = models.IntegerField()
     start_time = models.DateTimeField(auto_now_add=True)
