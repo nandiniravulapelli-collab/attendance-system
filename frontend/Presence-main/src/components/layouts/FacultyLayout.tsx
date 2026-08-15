@@ -1856,9 +1856,9 @@ export const FacultyLayout: React.FC = () => {
                     <Plus className="w-4 h-4 mr-2" />
                     Start New Session
                   </Button>
-                  <Button onClick={() => setManualSessionDialogOpen(true)} variant="outline">
+                  <Button onClick={() => setManualSessionDialogOpen(true)} variant="outline" disabled>
                     <Edit className="w-4 h-4 mr-2" />
-                    Manual Session ID
+                    Manual Session ID (Requires Migration)
                   </Button>
                 </div>
               </CardHeader>
