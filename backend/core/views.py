@@ -2070,32 +2070,14 @@ def qr_attendance_sessions_view(request):
         if not subject:
             return Response({"detail": "Subject is required."}, status=400)
         
-        # Check if manual_session_id field exists in database
-        field_exists = False
-        try:
-            # Try to check if the field exists by querying a session
-            QRAttendanceSession.objects.first()
-            # If we get here, the table exists. Now check if the field exists
-            from django.db import connection
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'core_qrattendancesession' AND column_name = 'manual_session_id'")
-                field_exists = cursor.fetchone() is not None
-        except:
-            field_exists = False
-        
-        print(f"manual_session_id field exists: {field_exists}")
-        
-        # Validate manual session ID if provided and field exists
-        if manual_session_id and field_exists:
+        # Validate manual session ID if provided
+        if manual_session_id:
             # Check if it's exactly 5 digits
             if not manual_session_id.isdigit() or len(manual_session_id) != 5:
                 return Response({"detail": "Session ID must be exactly 5 digits."}, status=400)
             # Check if already in use
             if QRAttendanceSession.objects.filter(manual_session_id=manual_session_id).exists():
                 return Response({"detail": "This session ID is already in use."}, status=400)
-        elif manual_session_id and not field_exists:
-            # Field doesn't exist in database, return error
-            return Response({"detail": "Manual session ID feature requires database migration. Please contact administrator."}, status=400)
         
         # Create session - no department/section needed
         start_time = timezone.now()
@@ -2106,8 +2088,7 @@ def qr_attendance_sessions_view(request):
             print(f"Creating session - Faculty: {target_faculty.username}, Subject: {subject}")
             print(f"Start time: {start_time}, End time: {end_time}")
             
-            # Build session creation kwargs
-            session_kwargs = {
+            session = QRAttendanceSession.objects.create(
                 faculty=target_faculty,
                 subject=subject,
                 year='1',  # Default, not used
@@ -2117,14 +2098,9 @@ def qr_attendance_sessions_view(request):
                 duration_minutes=duration_minutes,
                 end_time=end_time,
                 current_qr_token=_generate_qr_token(),
-                token_expires_at=token_expires_at
-            }
-            
-            # Only add manual_session_id if field exists and it's provided
-            if field_exists and manual_session_id:
-                session_kwargs['manual_session_id'] = manual_session_id
-            
-            session = QRAttendanceSession.objects.create(**session_kwargs)
+                token_expires_at=token_expires_at,
+                manual_session_id=manual_session_id if manual_session_id else None
+            )
             print(f"Session created successfully: {session.id}")
         except Exception as e:
             import traceback

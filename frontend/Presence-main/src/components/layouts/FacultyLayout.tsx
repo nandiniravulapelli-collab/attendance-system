@@ -175,12 +175,12 @@ export const FacultyLayout: React.FC = () => {
   const [qrRefreshInterval, setQrRefreshInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [qrSessionForm, setQrSessionForm] = useState({
     subject: '',
-    duration_minutes: 10
+    duration_hours: 1
   });
   const [manualSessionDialogOpen, setManualSessionDialogOpen] = useState(false);
   const [manualSessionForm, setManualSessionForm] = useState({
     subject: '',
-    duration_minutes: 10,
+    duration_hours: 1,
     manual_session_id: ''
   });
   const [qrSessionDialogOpen, setQrSessionDialogOpen] = useState(false);
@@ -991,7 +991,7 @@ export const FacultyLayout: React.FC = () => {
     try {
       const payload: any = {
         subject: qrSessionForm.subject,
-        duration_minutes: qrSessionForm.duration_minutes
+        duration_minutes: qrSessionForm.duration_hours * 60
       };
       
       console.log('Starting QR session with payload:', payload);
@@ -1012,7 +1012,7 @@ export const FacultyLayout: React.FC = () => {
         setQrSessionDialogOpen(false);
         setQrSessionForm({
           subject: '',
-          duration_minutes: 10
+          duration_hours: 1
         });
         handleActivateQrSession(session.id);
         toast({ title: 'Session Started', description: 'QR attendance session is now active.' });
@@ -1171,7 +1171,7 @@ export const FacultyLayout: React.FC = () => {
     try {
       const payload: any = {
         subject: manualSessionForm.subject,
-        duration_minutes: manualSessionForm.duration_minutes,
+        duration_minutes: manualSessionForm.duration_hours * 60,
         manual_session_id: manualSessionForm.manual_session_id
       };
       
@@ -1193,7 +1193,7 @@ export const FacultyLayout: React.FC = () => {
         setManualSessionDialogOpen(false);
         setManualSessionForm({
           subject: '',
-          duration_minutes: 10,
+          duration_hours: 1,
           manual_session_id: ''
         });
         toast({ title: 'Session Created', description: `Manual session with ID ${manualSessionForm.manual_session_id} created successfully.` });
@@ -2582,17 +2582,16 @@ export const FacultyLayout: React.FC = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="qr-duration">Duration (minutes) *</Label>
+                  <Label htmlFor="qr-duration">Duration (hours) *</Label>
                   <Input
                     id="qr-duration"
                     type="number"
                     min="1"
-                    max="600"
-                    step="1"
-                    value={qrSessionForm.duration_minutes}
-                    onChange={(e) => setQrSessionForm({...qrSessionForm, duration_minutes: parseInt(e.target.value) || 10})}
+                    max="24"
+                    step="0.5"
+                    value={qrSessionForm.duration_hours}
+                    onChange={(e) => setQrSessionForm({...qrSessionForm, duration_hours: parseFloat(e.target.value) || 1})}
                   />
-                  <p className="text-xs text-muted-foreground">Session duration in minutes (1-600)</p>
                 </div>
               </div>
               <DialogFooter>
@@ -2615,12 +2614,11 @@ export const FacultyLayout: React.FC = () => {
                   <Input
                     id="manual-session-id"
                     type="text"
-                    placeholder="Enter 5-digit session ID (e.g., 12345)"
+                    placeholder="Enter custom session ID (e.g., CLASS101)"
                     value={manualSessionForm.manual_session_id}
                     onChange={(e) => setManualSessionForm({...manualSessionForm, manual_session_id: e.target.value})}
-                    maxLength={5}
                   />
-                  <p className="text-xs text-muted-foreground">Students will use this 5-digit ID to mark attendance manually</p>
+                  <p className="text-xs text-muted-foreground">Students will use this ID to mark attendance manually</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="manual-subject">Subject *</Label>
@@ -2638,17 +2636,16 @@ export const FacultyLayout: React.FC = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="manual-duration">Duration (minutes) *</Label>
+                  <Label htmlFor="manual-duration">Duration (hours) *</Label>
                   <Input
                     id="manual-duration"
                     type="number"
                     min="1"
-                    max="600"
-                    step="1"
-                    value={manualSessionForm.duration_minutes}
-                    onChange={(e) => setManualSessionForm({...manualSessionForm, duration_minutes: parseInt(e.target.value) || 10})}
+                    max="24"
+                    step="0.5"
+                    value={manualSessionForm.duration_hours}
+                    onChange={(e) => setManualSessionForm({...manualSessionForm, duration_hours: parseFloat(e.target.value) || 1})}
                   />
-                  <p className="text-xs text-muted-foreground">Session duration in minutes (1-600)</p>
                 </div>
               </div>
               <DialogFooter>
