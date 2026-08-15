@@ -1924,12 +1924,6 @@ export const AdminLayout: React.FC = () => {
       return;
     }
 
-    // Validate session ID is exactly 5 digits
-    if (!adminManualSessionForm.manual_session_id.match(/^\d{5}$/)) {
-      toast({ title: 'Validation Error', description: 'Session ID must be exactly 5 digits.', variant: 'destructive' });
-      return;
-    }
-
     try {
       const payload: any = {
         faculty_id: adminManualSessionForm.faculty_id,
@@ -5189,7 +5183,7 @@ export const AdminLayout: React.FC = () => {
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Create Manual Session ID</DialogTitle>
-                <DialogDescription>Create a session with a custom 5-digit ID for manual student entry</DialogDescription>
+                <DialogDescription>Create a session with a custom ID for manual student entry</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -5197,12 +5191,11 @@ export const AdminLayout: React.FC = () => {
                   <Input
                     id="admin-manual-session-id"
                     type="text"
-                    placeholder="Enter 5-digit session ID (e.g., 12345)"
+                    placeholder="Enter custom session ID (e.g., CLASS101)"
                     value={adminManualSessionForm.manual_session_id}
                     onChange={(e) => setAdminManualSessionForm({...adminManualSessionForm, manual_session_id: e.target.value})}
-                    maxLength={5}
                   />
-                  <p className="text-xs text-muted-foreground">Students will use this 5-digit ID to mark attendance manually</p>
+                  <p className="text-xs text-muted-foreground">Students will use this ID to mark attendance manually</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="admin-manual-faculty">Faculty *</Label>

@@ -2072,10 +2072,6 @@ def qr_attendance_sessions_view(request):
         
         # Validate manual session ID if provided
         if manual_session_id:
-            # Check if it's exactly 5 digits
-            if not manual_session_id.isdigit() or len(manual_session_id) != 5:
-                return Response({"detail": "Session ID must be exactly 5 digits."}, status=400)
-            # Check if already in use
             if QRAttendanceSession.objects.filter(manual_session_id=manual_session_id).exists():
                 return Response({"detail": "This session ID is already in use."}, status=400)
         
