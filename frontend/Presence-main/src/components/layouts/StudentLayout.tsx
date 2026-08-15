@@ -260,9 +260,22 @@ export const StudentLayout: React.FC = () => {
     if (toDate) params.set('to_date', format(toDate, 'yyyy-MM-dd'));
     const url = params.toString() ? apiUrl(`/api/attendance/?${params.toString()}`) : apiUrl('/api/attendance/');
     fetch(url, { credentials: 'include' })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => setApiAttendance(data))
-      .catch(() => setApiAttendance(null));
+  .then(async (res) => {
+    const data = await res.json();
+    console.log("ATTENDANCE STATUS:", res.status);
+    console.log("ATTENDANCE RESPONSE:", data);
+
+    if (!res.ok) {
+      throw new Error(`Attendance API failed: ${res.status}`);
+    }
+
+    return data;
+  })
+  .then(data => setApiAttendance(data))
+  .catch((error) => {
+    console.error("ATTENDANCE API ERROR:", error);
+    setApiAttendance(null);
+  });
   }, [numericId, fromDate, toDate, isStudentAttendanceFrozen]);
 
   const bySubject: Record<string, { present: number; total: number; attendedHours: number; totalHours: number }> = {};
