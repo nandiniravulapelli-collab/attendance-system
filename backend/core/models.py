@@ -123,7 +123,6 @@ class QRAttendanceSession(models.Model):
     current_qr_token = models.CharField(max_length=100, unique=True)
     token_expires_at = models.DateTimeField()
     token_refresh_interval = models.IntegerField(default=5, help_text='Token refresh interval in seconds')
-    manual_session_id = models.CharField(max_length=50, blank=True, null=True, unique=True, help_text='Custom session ID for manual entry')
 
     class Meta:
         verbose_name = 'QR Attendance Session'
