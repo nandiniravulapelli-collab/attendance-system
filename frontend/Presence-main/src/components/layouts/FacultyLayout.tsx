@@ -1162,6 +1162,12 @@ export const FacultyLayout: React.FC = () => {
       return;
     }
 
+    // Validate session ID is exactly 5 digits
+    if (!manualSessionForm.manual_session_id.match(/^\d{5}$/)) {
+      toast({ title: 'Validation Error', description: 'Session ID must be exactly 5 digits.', variant: 'destructive' });
+      return;
+    }
+
     try {
       const payload: any = {
         subject: manualSessionForm.subject,
@@ -2613,6 +2619,61 @@ export const FacultyLayout: React.FC = () => {
                     onChange={(e) => setManualSessionForm({...manualSessionForm, manual_session_id: e.target.value})}
                   />
                   <p className="text-xs text-muted-foreground">Students will use this ID to mark attendance manually</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-subject">Subject *</Label>
+                  <Select value={manualSessionForm.subject} onValueChange={(value) => setManualSessionForm({...manualSessionForm, subject: value})}>
+                    <SelectTrigger id="manual-subject">
+                      <SelectValue placeholder="Select subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {subjectsAll.map((subject) => (
+                        <SelectItem key={subject.id} value={subject.code}>
+                          {subject.code} - {subject.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-duration">Duration (hours) *</Label>
+                  <Input
+                    id="manual-duration"
+                    type="number"
+                    min="1"
+                    max="24"
+                    step="0.5"
+                    value={manualSessionForm.duration_hours}
+                    onChange={(e) => setManualSessionForm({...manualSessionForm, duration_hours: parseFloat(e.target.value) || 1})}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setManualSessionDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleManualSession}>Create Session</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Manual Session ID Dialog */}
+          <Dialog open={manualSessionDialogOpen} onOpenChange={setManualSessionDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create Manual Session ID</DialogTitle>
+                <DialogDescription>Create a session with a custom 5-digit ID for manual student entry</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="manual-session-id">Session ID *</Label>
+                  <Input
+                    id="manual-session-id"
+                    type="text"
+                    placeholder="Enter 5-digit session ID (e.g., 12345)"
+                    value={manualSessionForm.manual_session_id}
+                    onChange={(e) => setManualSessionForm({...manualSessionForm, manual_session_id: e.target.value})}
+                    maxLength={5}
+                  />
+                  <p className="text-xs text-muted-foreground">Students will use this 5-digit ID to mark attendance manually</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="manual-subject">Subject *</Label>
