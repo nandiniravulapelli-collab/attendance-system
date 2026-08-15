@@ -2092,9 +2092,8 @@ def qr_attendance_sessions_view(request):
             if QRAttendanceSession.objects.filter(manual_session_id=manual_session_id).exists():
                 return Response({"detail": "This session ID is already in use."}, status=400)
         elif manual_session_id and not field_exists:
-            # Field doesn't exist in database, ignore manual_session_id and create regular session
-            print("Manual session ID provided but field doesn't exist. Creating regular session instead.")
-            manual_session_id = None
+            # Field doesn't exist in database, return error
+            return Response({"detail": "Manual session ID feature requires database migration. Please contact administrator."}, status=400)
         
         # Create session - no department/section needed
         start_time = timezone.now()
