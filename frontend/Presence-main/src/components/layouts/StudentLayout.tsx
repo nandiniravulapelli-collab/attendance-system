@@ -261,22 +261,19 @@ export const StudentLayout: React.FC = () => {
     const url = params.toString() ? apiUrl(`/api/attendance/?${params.toString()}`) : apiUrl('/api/attendance/');
     fetch(url, { credentials: 'include' })
   .then(async (res) => {
-    const data = await res.json();
+    const text = await res.text();
 
     alert(
       `Attendance API\n\n` +
-      `Status: ${res.status}\n` +
-      `Student: ${data?.records?.[0]?.student ?? 'Not found'}\n` +
-      `Total Classes: ${data?.total_classes ?? 'Not found'}\n` +
-      `Present: ${data?.present_count ?? 'Not found'}\n` +
-      `Attendance: ${data?.attendance_percentage ?? 'Not found'}%`
+      `Status: ${res.status}\n\n` +
+      `Response:\n${text.substring(0, 500)}`
     );
 
     if (!res.ok) {
       throw new Error(`API Error: ${res.status}`);
     }
 
-    return data;
+    return JSON.parse(text);
   })
   .then(data => setApiAttendance(data))
   .catch((error) => {
