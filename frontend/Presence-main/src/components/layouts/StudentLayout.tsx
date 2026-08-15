@@ -262,18 +262,25 @@ export const StudentLayout: React.FC = () => {
     fetch(url, { credentials: 'include' })
   .then(async (res) => {
     const data = await res.json();
-    console.log("ATTENDANCE STATUS:", res.status);
-    console.log("ATTENDANCE RESPONSE:", data);
+
+    alert(
+      `Attendance API\n\n` +
+      `Status: ${res.status}\n` +
+      `Student: ${data?.records?.[0]?.student ?? 'Not found'}\n` +
+      `Total Classes: ${data?.total_classes ?? 'Not found'}\n` +
+      `Present: ${data?.present_count ?? 'Not found'}\n` +
+      `Attendance: ${data?.attendance_percentage ?? 'Not found'}%`
+    );
 
     if (!res.ok) {
-      throw new Error(`Attendance API failed: ${res.status}`);
+      throw new Error(`API Error: ${res.status}`);
     }
 
     return data;
   })
   .then(data => setApiAttendance(data))
   .catch((error) => {
-    console.error("ATTENDANCE API ERROR:", error);
+    alert(`Attendance API ERROR\n\n${error.message}`);
     setApiAttendance(null);
   });
   }, [numericId, fromDate, toDate, isStudentAttendanceFrozen]);
