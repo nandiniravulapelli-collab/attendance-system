@@ -2073,14 +2073,12 @@ def qr_attendance_sessions_view(request):
         # Check if manual_session_id field exists in database
         field_exists = False
         try:
-            # Try to check if the field exists by querying a session
-            QRAttendanceSession.objects.first()
-            # If we get here, the table exists. Now check if the field exists
             from django.db import connection
             with connection.cursor() as cursor:
                 cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'core_qrattendancesession' AND column_name = 'manual_session_id'")
                 field_exists = cursor.fetchone() is not None
-        except:
+        except Exception as e:
+            print(f"Error checking for manual_session_id field: {e}")
             field_exists = False
         
         print(f"manual_session_id field exists: {field_exists}")
@@ -2108,16 +2106,16 @@ def qr_attendance_sessions_view(request):
             
             # Build session creation kwargs
             session_kwargs = {
-                faculty=target_faculty,
-                subject=subject,
-                year='1',  # Default, not used
-                branch='CSM',  # Default, not used
-                branches='CSM',  # Default, not used
-                sections='A',  # Default, not used
-                duration_minutes=duration_minutes,
-                end_time=end_time,
-                current_qr_token=_generate_qr_token(),
-                token_expires_at=token_expires_at
+                'faculty': target_faculty,
+                'subject': subject,
+                'year': '1',  # Default, not used
+                'branch': 'CSM',  # Default, not used
+                'branches': 'CSM',  # Default, not used
+                'sections': 'A',  # Default, not used
+                'duration_minutes': duration_minutes,
+                'end_time': end_time,
+                'current_qr_token': _generate_qr_token(),
+                'token_expires_at': token_expires_at
             }
             
             # Only add manual_session_id if field exists and it's provided
