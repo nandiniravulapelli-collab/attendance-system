@@ -208,9 +208,16 @@ class QRAttendanceSessionSerializer(serializers.ModelSerializer):
             'id', 'faculty', 'faculty_name', 'subject', 'year', 'branch', 'branches', 'sections',
             'duration_minutes', 'duration_hours', 'start_time', 'end_time', 'is_active', 
             'current_qr_token', 'token_expires_at', 'token_refresh_interval',
-            'attendance_count', 'is_expired', 'manual_session_id'
+            'attendance_count', 'is_expired'
         )
         read_only_fields = ('id', 'faculty', 'start_time', 'current_qr_token', 'token_expires_at')
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Check if manual_session_id field exists
+        if hasattr(instance, 'manual_session_id'):
+            data['manual_session_id'] = instance.manual_session_id
+        return data
 
     def get_faculty_name(self, obj):
         return obj.faculty.full_name or obj.faculty.username

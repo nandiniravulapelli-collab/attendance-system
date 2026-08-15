@@ -181,13 +181,13 @@ export const AdminLayout: React.FC = () => {
   const [adminQrRefreshInterval, setAdminQrRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   const [adminQrSessionForm, setAdminQrSessionForm] = useState({
     subject: '',
-    duration_hours: 1,
+    duration_minutes: 10,
     faculty_id: ''
   });
   const [adminManualSessionDialogOpen, setAdminManualSessionDialogOpen] = useState(false);
   const [adminManualSessionForm, setAdminManualSessionForm] = useState({
     subject: '',
-    duration_hours: 1,
+    duration_minutes: 10,
     faculty_id: '',
     manual_session_id: ''
   });
@@ -1842,7 +1842,7 @@ export const AdminLayout: React.FC = () => {
       const payload: any = {
         faculty_id: adminQrSessionForm.faculty_id,
         subject: adminQrSessionForm.subject,
-        duration_minutes: adminQrSessionForm.duration_hours * 60
+        duration_minutes: adminQrSessionForm.duration_minutes
       };
       
       const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
@@ -1857,7 +1857,7 @@ export const AdminLayout: React.FC = () => {
         setAdminQrSessionDialogOpen(false);
         setAdminQrSessionForm({
           subject: '',
-          duration_hours: 1,
+          duration_minutes: 10,
           faculty_id: ''
         });
         handleAdminActivateQrSession(session.id);
@@ -1934,7 +1934,7 @@ export const AdminLayout: React.FC = () => {
       const payload: any = {
         faculty_id: adminManualSessionForm.faculty_id,
         subject: adminManualSessionForm.subject,
-        duration_minutes: adminManualSessionForm.duration_hours * 60,
+        duration_minutes: adminManualSessionForm.duration_minutes,
         manual_session_id: adminManualSessionForm.manual_session_id
       };
       
@@ -1950,7 +1950,7 @@ export const AdminLayout: React.FC = () => {
         setAdminManualSessionDialogOpen(false);
         setAdminManualSessionForm({
           subject: '',
-          duration_hours: 1,
+          duration_minutes: 10,
           faculty_id: '',
           manual_session_id: ''
         });
@@ -5165,16 +5165,17 @@ export const AdminLayout: React.FC = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="admin-qr-duration">Duration (hours) *</Label>
+                  <Label htmlFor="admin-qr-duration">Duration (minutes) *</Label>
                   <Input
                     id="admin-qr-duration"
                     type="number"
                     min="1"
-                    max="24"
-                    step="0.5"
-                    value={adminQrSessionForm.duration_hours}
-                    onChange={(e) => setAdminQrSessionForm({...adminQrSessionForm, duration_hours: parseFloat(e.target.value) || 1})}
+                    max="600"
+                    step="1"
+                    value={adminQrSessionForm.duration_minutes}
+                    onChange={(e) => setAdminQrSessionForm({...adminQrSessionForm, duration_minutes: parseInt(e.target.value) || 10})}
                   />
+                  <p className="text-xs text-muted-foreground">Session duration in minutes (1-600)</p>
                 </div>
               </div>
               <DialogFooter>
@@ -5235,16 +5236,17 @@ export const AdminLayout: React.FC = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="admin-manual-duration">Duration (hours) *</Label>
+                  <Label htmlFor="admin-manual-duration">Duration (minutes) *</Label>
                   <Input
                     id="admin-manual-duration"
                     type="number"
                     min="1"
-                    max="24"
-                    step="0.5"
-                    value={adminManualSessionForm.duration_hours}
-                    onChange={(e) => setAdminManualSessionForm({...adminManualSessionForm, duration_hours: parseFloat(e.target.value) || 1})}
+                    max="600"
+                    step="1"
+                    value={adminManualSessionForm.duration_minutes}
+                    onChange={(e) => setAdminManualSessionForm({...adminManualSessionForm, duration_minutes: parseInt(e.target.value) || 10})}
                   />
+                  <p className="text-xs text-muted-foreground">Session duration in minutes (1-600)</p>
                 </div>
               </div>
               <DialogFooter>
