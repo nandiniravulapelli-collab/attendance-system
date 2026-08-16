@@ -42,6 +42,8 @@ import {
   Edit,
   UserCircle,
   Plus,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -179,6 +181,18 @@ export const FacultyLayout: React.FC = () => {
   });
   const [qrSessionDialogOpen, setQrSessionDialogOpen] = useState(false);
   const [qrAttendanceRecords, setQrAttendanceRecords] = useState<Array<any>>([]);
+  const [hideSessionId, setHideSessionId] = useState(false);
+  const [displaySessionId, setDisplaySessionId] = useState<string>('');
+
+  // Generate 5-digit random session ID
+  const generateFiveDigitId = () => {
+    return Math.floor(10000 + Math.random() * 90000).toString();
+  };
+
+  // Format session ID to 5 digits
+  const formatSessionId = (id: number) => {
+    return String(id).padStart(5, '0');
+  };
 
   /** Assigned subject ids/codes from API — only these subjects appear for this faculty */
   const [facultyAssignedSubjectTokens, setFacultyAssignedSubjectTokens] = useState<string[]>([]);
@@ -1036,6 +1050,9 @@ export const FacultyLayout: React.FC = () => {
         setActiveQrSession(session);
         setQrCodeImage(session.qr_code_image);
         
+        // Use formatted session ID
+        setDisplaySessionId(formatSessionId(sessionId));
+        
         // Start QR refresh interval
         if (qrRefreshInterval) {
           clearInterval(qrRefreshInterval);
@@ -1806,17 +1823,24 @@ export const FacultyLayout: React.FC = () => {
                               <span className="text-sm text-muted-foreground">Session ID:</span>
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-blue-600">
-                                  {activeQrSession.id}
+                                  {hideSessionId ? '•••••' : displaySessionId}
                                 </span>
                                 <Button 
                                   variant="ghost" 
                                   size="sm"
                                   onClick={() => {
-                                    navigator.clipboard.writeText(String(activeQrSession.id));
+                                    navigator.clipboard.writeText(displaySessionId);
                                     toast({ title: 'Copied', description: 'Session ID copied to clipboard' });
                                   }}
                                 >
                                   <FileDown className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => setHideSessionId(!hideSessionId)}
+                                >
+                                  {hideSessionId ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                                 </Button>
                               </div>
                             </div>
@@ -1890,7 +1914,7 @@ export const FacultyLayout: React.FC = () => {
                             {qrSessions.map((session: any) => (
                               <tr key={session.id} className="border-t hover:bg-muted/50">
                                 <td className="px-4 py-2 text-sm font-medium text-blue-600">
-                                {session.id}
+                                {formatSessionId(session.id)}
                               </td>
                                 <td className="px-4 py-2 text-sm">{session.subject}</td>
                                 <td className="px-4 py-2 text-sm">{session.duration_hours} hour(s)</td>
