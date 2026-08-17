@@ -421,13 +421,16 @@ export const StudentLayout: React.FC = () => {
     try {
       // Handle different input formats
       if (typeof sessionInfo === 'string') {
+        // Remove any colons or tokens if present (from QR scan)
+        const cleanSessionId = sessionInfo.split(':')[0];
+        
         // For manual entry, require exactly 5 digits
-        if (!sessionInfo.match(/^\d{5}$/)) {
-          console.error('Invalid session ID format:', sessionInfo);
+        if (!cleanSessionId.match(/^\d{5}$/)) {
+          console.error('Invalid session ID format:', cleanSessionId);
           toast({ title: 'Validation Error', description: 'Session ID must be exactly 5 digits (e.g., 12345).', variant: 'destructive' });
           return;
         }
-        sessionId = sessionInfo;
+        sessionId = cleanSessionId;
       } else {
         console.error('Invalid session ID type:', typeof sessionInfo);
         toast({ title: 'Validation Error', description: 'Invalid session ID format.', variant: 'destructive' });
@@ -1386,8 +1389,16 @@ export const StudentLayout: React.FC = () => {
                       <Label htmlFor="manual-session-id">Session ID</Label>
                       <Input
                         id="manual-session-id"
+                        type="text"
                         value={qrSessionId}
-                        onChange={(e) => setQrSessionId(e.target.value)}
+                        onChange={(e) => {
+                          // Only allow numbers
+                          const value = e.target.value.replace(/\D/g, '');
+                          // Limit to 5 digits
+                          if (value.length <= 5) {
+                            setQrSessionId(value);
+                          }
+                        }}
                         placeholder="Enter 5-digit session ID (e.g., 12345)"
                         maxLength={5}
                       />

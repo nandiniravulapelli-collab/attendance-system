@@ -2201,6 +2201,12 @@ def qr_attendance_mark_view(request):
     except QRAttendanceSession.DoesNotExist:
         return Response({"detail": "Invalid session."}, status=404)
     
+    # Verify that the input matches the exact 5-digit format of the session ID
+    # This prevents "78" from working for session "00078"
+    formatted_session_id = str(session.id).zfill(5)
+    if session_id != formatted_session_id:
+        return Response({"detail": "Invalid session ID. Please use the exact 5-digit ID provided by faculty."}, status=400)
+    
     # Check if session is active
     if not session.is_active:
         return Response({"detail": "Attendance session is closed."}, status=403)
