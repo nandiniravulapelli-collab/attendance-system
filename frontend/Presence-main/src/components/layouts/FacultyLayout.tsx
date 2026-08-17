@@ -2807,7 +2807,8 @@ export const FacultyLayout: React.FC = () => {
       </Dialog>
 
       {/* Change Password Dialog */}
-        <DialogContent className="sm:max-w-md">
+          <Dialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
+          <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Change password</DialogTitle>
             <DialogDescription>Enter your current password and choose a new one.</DialogDescription>
