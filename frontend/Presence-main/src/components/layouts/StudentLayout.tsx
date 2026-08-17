@@ -416,15 +416,30 @@ export const StudentLayout: React.FC = () => {
       return;
     }
 
-    // Convert session ID to number if it's a string
-    const sessionId = parseInt(String(sessionInfo).split(':')[0]);
-    console.log('Parsed session ID:', sessionId);
-    
-    if (isNaN(sessionId)) {
-      console.error('Invalid session ID:', sessionInfo);
+    // Validate session ID format - must be exactly 5 digits
+    let sessionId: string;
+    try {
+      // Handle different input formats
+      if (typeof sessionInfo === 'string') {
+        // For manual entry, require exactly 5 digits
+        if (!sessionInfo.match(/^\d{5}$/)) {
+          console.error('Invalid session ID format:', sessionInfo);
+          toast({ title: 'Validation Error', description: 'Session ID must be exactly 5 digits (e.g., 12345).', variant: 'destructive' });
+          return;
+        }
+        sessionId = sessionInfo;
+      } else {
+        console.error('Invalid session ID type:', typeof sessionInfo);
+        toast({ title: 'Validation Error', description: 'Invalid session ID format.', variant: 'destructive' });
+        return;
+      }
+    } catch (e) {
+      console.error('Error parsing session ID:', e);
       toast({ title: 'Validation Error', description: 'Invalid session ID format.', variant: 'destructive' });
       return;
     }
+    
+    console.log('Validated session ID:', sessionId);
 
     // Generate device ID if not provided
     const finalDeviceId = deviceId || `${user?.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -517,17 +532,20 @@ export const StudentLayout: React.FC = () => {
     }
     
     // Parse the QR data to extract session ID
-    // Expected format: "session_id:token"
+    // Expected format: "session_id:token" where session_id is 5 digits
     const parts = decodedText.split(':');
     const sessionId = parts[0]; // Extract session ID
     
-    console.log('Extracted session ID:', sessionId);
+    console.log('Extracted session ID from QR:', sessionId);
     
-    if (!sessionId || isNaN(parseInt(sessionId))) {
+    // Validate session ID format - must be exactly 5 digits
+    if (!sessionId || !sessionId.match(/^\d{5}$/)) {
       console.error('Invalid session ID from QR:', sessionId);
-      toast({ title: 'Invalid QR Code', description: 'This QR code is not valid for attendance. Please use the current session QR code.', variant: 'destructive' });
+      toast({ title: 'Invalid QR Code', description: 'QR code must contain exactly 5 digits for session ID.', variant: 'destructive' });
       return;
     }
+    
+    console.log('Validated session ID from QR:', sessionId);
     
     // Stop scanning after successful detection
     if (qrScannerRef.current) {
@@ -535,7 +553,7 @@ export const StudentLayout: React.FC = () => {
       qrScannerRef.current = null;
     }
     
-    handleQrMarkAttendance(decodedText);
+    handleQrMarkAttendance(sessionId);
   };
 
   const handleQrError = (error: any) => {
@@ -1370,8 +1388,10 @@ export const StudentLayout: React.FC = () => {
                         id="manual-session-id"
                         value={qrSessionId}
                         onChange={(e) => setQrSessionId(e.target.value)}
-                        placeholder="Enter session ID from faculty screen"
+                        placeholder="Enter 5-digit session ID (e.g., 12345)"
+                        maxLength={5}
                       />
+                      <p className="text-xs text-muted-foreground">Session ID must be exactly 5 digits</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="device-id">Device ID</Label>

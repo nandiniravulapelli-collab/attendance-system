@@ -79,8 +79,11 @@ def _hash_device_id(device_id: str) -> str:
 
 def _generate_qr_code_base64(token: str, session_id: int) -> str:
     """Generate QR code as base64 encoded image with session information."""
+    # Format session ID to 5 digits
+    formatted_session_id = str(session_id).zfill(5)
+    
     # Embed session information in the QR code
-    qr_data = f"{session_id}:{token}"
+    qr_data = f"{formatted_session_id}:{token}"
     print(f"Generating QR code with data: {qr_data}")
     
     qr = qrcode.QRCode(
@@ -99,7 +102,7 @@ def _generate_qr_code_base64(token: str, session_id: int) -> str:
     img.save(buffer, format='PNG')
     img_str = base64.b64encode(buffer.getvalue()).decode()
     
-    print(f"QR code generated successfully for session {session_id}")
+    print(f"QR code generated successfully for session {formatted_session_id}")
     return f"data:image/png;base64,{img_str}"
 
 
@@ -2179,9 +2182,13 @@ def qr_attendance_mark_view(request):
     if not all([session_id, device_id]):
         return Response({"detail": "Session ID and device ID are required."}, status=400)
     
-    # Convert session_id to integer
+    # Validate session ID format - must be exactly 5 digits
+    if not isinstance(session_id, str) or not session_id.isdigit() or len(session_id) != 5:
+        return Response({"detail": "Session ID must be exactly 5 digits."}, status=400)
+    
+    # Convert session_id to integer for database lookup
     try:
-        session_id = int(session_id)
+        session_id_int = int(session_id)
     except (ValueError, TypeError):
         return Response({"detail": "Invalid session ID format."}, status=400)
     
@@ -2190,7 +2197,7 @@ def qr_attendance_mark_view(request):
         return Response({"detail": "Only students can mark attendance."}, status=403)
     
     try:
-        session = QRAttendanceSession.objects.get(id=session_id)
+        session = QRAttendanceSession.objects.get(id=session_id_int)
     except QRAttendanceSession.DoesNotExist:
         return Response({"detail": "Invalid session."}, status=404)
     
