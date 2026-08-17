@@ -44,6 +44,8 @@ import {
   Plus,
   Eye,
   EyeOff,
+  Maximize,
+  Minimize,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -183,6 +185,50 @@ export const FacultyLayout: React.FC = () => {
   const [qrAttendanceRecords, setQrAttendanceRecords] = useState<Array<any>>([]);
   const [hideSessionId, setHideSessionId] = useState(false);
   const [displaySessionId, setDisplaySessionId] = useState<string>('');
+  const [qrFullScreenOpen, setQrFullScreenOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Toggle full screen mode
+  const toggleFullScreen = () => {
+    if (!isFullscreen) {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+      } else if ((document.documentElement as any).webkitRequestFullscreen) {
+        (document.documentElement as any).webkitRequestFullscreen();
+      } else if ((document.documentElement as any).msRequestFullscreen) {
+        (document.documentElement as any).msRequestFullscreen();
+      }
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      } else if ((document as any).msExitFullscreen) {
+        (document as any).msExitFullscreen();
+      }
+      setIsFullscreen(false);
+    }
+  };
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
 
   // Generate 5-digit random session ID
   const generateFiveDigitId = () => {
@@ -1869,6 +1915,15 @@ export const FacultyLayout: React.FC = () => {
                             </div>
                           )}
                           <p className="text-xs text-muted-foreground mt-2">QR refreshes every 5 seconds</p>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => setQrFullScreenOpen(true)}
+                          >
+                            <Maximize className="w-4 h-4 mr-2" />
+                            Full Screen
+                          </Button>
                         </div>
                       </div>
                       <div className="mt-4 flex gap-2">
@@ -2689,7 +2744,69 @@ export const FacultyLayout: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
+      {/* QR Full Screen Dialog */}
+      <Dialog open={qrFullScreenOpen} onOpenChange={setQrFullScreenOpen}>
+        <DialogContent className="max-w-7xl w-full h-[90vh] flex flex-col">
+          <DialogHeader>
+            <div className="flex justify-between items-center w-full">
+              <div>
+                <DialogTitle>QR Code - Full Screen</DialogTitle>
+                <DialogDescription>Session ID: {hideSessionId ? '••••••' : displaySessionId}</DialogDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleFullScreen}
+                >
+                  {isFullscreen ? <Minimize className="w-4 h-4 mr-2" /> : <Maximize className="w-4 h-4 mr-2" />}
+                  {isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setQrFullScreenOpen(false)}
+                >
+                  <XCircle className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 flex flex-col items-center justify-center py-8">
+            {qrCodeImage ? (
+              <div className="bg-white p-8 rounded-lg shadow-lg">
+                <img src={qrCodeImage} alt="QR Code" className="w-[500px] h-[500px]" />
+              </div>
+            ) : (
+              <div className="w-[500px] h-[500px] bg-gray-200 rounded-lg flex items-center justify-center">
+                <span className="text-lg text-muted-foreground">Loading QR...</span>
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground mt-4">QR refreshes every 5 seconds</p>
+            <div className="mt-4 flex gap-2">
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(displaySessionId);
+                  toast({ title: 'Copied', description: 'Session ID copied to clipboard' });
+                }}
+              >
+                <FileDown className="w-4 h-4 mr-2" />
+                Copy Session ID
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => setHideSessionId(!hideSessionId)}
+              >
+                {hideSessionId ? <Eye className="w-4 h-4 mr-2" /> : <EyeOff className="w-4 h-4 mr-2" />}
+                {hideSessionId ? 'Show ID' : 'Hide ID'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Dialog */}
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Change password</DialogTitle>
