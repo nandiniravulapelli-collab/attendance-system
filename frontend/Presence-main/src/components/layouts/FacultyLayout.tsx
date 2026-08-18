@@ -1091,8 +1091,8 @@ export const FacultyLayout: React.FC = () => {
         setActiveQrSession(session);
         setQrCodeImage(session.qr_code_image);
         
-        // Use formatted session ID
-        setDisplaySessionId(formatSessionId(sessionId));
+        // Use custom session ID if available, otherwise fall back to formatted database ID
+        setDisplaySessionId(session.custom_session_id || formatSessionId(sessionId));
         
         // Start QR refresh interval
         if (qrRefreshInterval) {

@@ -72,18 +72,23 @@ def _generate_qr_token():
     return secrets.token_urlsafe(32)
 
 
+def _generate_random_session_id():
+    """Generate a random 5-digit session ID."""
+    return str(secrets.randbelow(90000) + 10000)
+
+
 def _hash_device_id(device_id: str) -> str:
     """Hash device ID for consistent identification."""
     return hashlib.sha256(device_id.encode()).hexdigest()
 
 
-def _generate_qr_code_base64(token: str, session_id: int) -> str:
+def _generate_qr_code_base64(token: str, session_id: int, custom_session_id: str = None) -> str:
     """Generate QR code as base64 encoded image with session information."""
-    # Format session ID to 5 digits
-    formatted_session_id = str(session_id).zfill(5)
+    # Use custom session ID if available, otherwise format database ID to 5 digits
+    session_display_id = custom_session_id if custom_session_id else str(session_id).zfill(5)
     
     # Embed session information in the QR code
-    qr_data = f"{formatted_session_id}:{token}"
+    qr_data = f"{session_display_id}:{token}"
     print(f"Generating QR code with data: {qr_data}")
     
     qr = qrcode.QRCode(
@@ -2081,6 +2086,11 @@ def qr_attendance_sessions_view(request):
             print(f"Creating session - Faculty: {target_faculty.username}, Subject: {subject}")
             print(f"Start time: {start_time}, End time: {end_time}")
             
+            # Generate unique random session ID
+            custom_session_id = _generate_random_session_id()
+            while QRAttendanceSession.objects.filter(custom_session_id=custom_session_id).exists():
+                custom_session_id = _generate_random_session_id()
+            
             session = QRAttendanceSession.objects.create(
                 faculty=target_faculty,
                 subject=subject,
@@ -2091,14 +2101,10 @@ def qr_attendance_sessions_view(request):
                 duration_minutes=duration_minutes,
                 end_time=end_time,
                 current_qr_token=_generate_qr_token(),
-                token_expires_at=token_expires_at
+                token_expires_at=token_expires_at,
+                custom_session_id=custom_session_id
             )
-            print(f"Session created successfully: {session.id}")
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            print(f"Error creating QR session: {error_details}")
-            return Response({"detail": f"Failed to create session: {str(e)}"}, status=500)
+            print(f"Session created successfully: {session.id}, Custom ID: {custom_session_id}")
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
@@ -2137,7 +2143,7 @@ def qr_attendance_session_detail_view(request, session_id):
         
         # Add QR code image
         try:
-            response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token, session.id)
+            response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token, session.id, session.custom_session_id)
         except Exception as e:
             response_data['qr_code_image'] = None
         
@@ -2186,18 +2192,20 @@ def qr_attendance_mark_view(request):
     if not isinstance(session_id, str) or not session_id.isdigit() or len(session_id) != 5:
         return Response({"detail": "Session ID must be exactly 5 digits."}, status=400)
     
-    # Convert session_id to integer for database lookup
-    try:
-        session_id_int = int(session_id)
-    except (ValueError, TypeError):
-        return Response({"detail": "Invalid session ID format."}, status=400)
-    
     # Only students can mark attendance
     if request.user.role != 'student':
         return Response({"detail": "Only students can mark attendance."}, status=403)
     
     try:
-        session = QRAttendanceSession.objects.get(id=session_id_int)
+        # First try to find session by custom_session_id
+        session = QRAttendanceSession.objects.get(custom_session_id=session_id)
+    except QRAttendanceSession.DoesNotExist:
+        # Fall back to database ID lookup
+        try:
+            session_id_int = int(session_id)
+            session = QRAttendanceSession.objects.get(id=session_id_int)
+        except (ValueError, TypeError, QRAttendanceSession.DoesNotExist):
+            return Response({"detail": "Invalid session ID."}, status=404)
     except QRAttendanceSession.DoesNotExist:
         return Response({"detail": "Invalid session."}, status=404)
     
@@ -2250,11 +2258,14 @@ def qr_attendance_mark_view(request):
         date=today
     ).first()
     
+    # Calculate hours from session duration
+    session_hours = round(session.duration_minutes / 60, 2)
+    
     if existing_attendance:
         # Update existing record
         existing_attendance.status = 'present'
-        existing_attendance.hours = 1
-        existing_attendance.total_hours = 1
+        existing_attendance.hours = session_hours
+        existing_attendance.total_hours = session_hours
         existing_attendance.save()
     else:
         # Create new record
@@ -2263,8 +2274,8 @@ def qr_attendance_mark_view(request):
             subject=session.subject,
             date=today,
             status='present',
-            hours=1,
-            total_hours=1
+            hours=session_hours,
+            total_hours=session_hours
         )
     
     serializer = QRAttendanceRecordSerializer(record)
