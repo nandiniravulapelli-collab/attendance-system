@@ -441,24 +441,19 @@ export const FacultyLayout: React.FC = () => {
   }, [user?.role, activeTab, isFacultyAttendanceFrozen]);
 
   const studentsInSection = useMemo(() => {
-    const facultyDeptSections = user?.faculty_department_sections || [];
-    
     return apiStudents
       .filter(s => !s.is_detained)
       .map(s => ({ id: String(s.id), name: s.full_name || s.roll_number || '', rollNumber: s.roll_number || '', email: s.email, departmentId: s.department || '', section: s.section || '', year: s.year ? Number(s.year) : 0 }))
       .filter(s => (selectedBranchCodes.length === 0 || selectedBranchCodes.includes(s.departmentId)))
       .filter(s => studentMatchesAnySection(s, selectedSections))
       .filter(s => {
-        // If faculty has specific section assignments, filter by those
-        if (facultyDeptSections.length > 0) {
-          const studentSections = s.section ? [s.section] : [];
-          return facultyDeptSections.some((fds: { department_code: string; section_name: string }) => {
-            return fds.department_code === s.departmentId && studentSections.includes(fds.section_name);
-          });
+        // Filter by year if a specific year is selected
+        if (selectedYear && selectedYear !== '__all__') {
+          return String(s.year) === selectedYear;
         }
         return true;
       });
-  }, [apiStudents, selectedBranchCodes.join(','), selectedSections.join(','), user?.faculty_department_sections]);
+  }, [apiStudents, selectedBranchCodes.join(','), selectedSections.join(','), selectedYear]);
 
   // Pre-fill attendance checkboxes when one subject is selected.
   const selectedSubjectObjs = subjects.filter(s => selectedSubjects.includes(String(s.id)));
