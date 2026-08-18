@@ -72,35 +72,6 @@ def _generate_qr_token():
     return secrets.token_urlsafe(32)
 
 
-def _pseudo_random_session_id(db_id: int) -> str:
-    """Generate a pseudo-random 5-digit session ID from database ID."""
-    # Use a simple transformation to make the ID appear random
-    # This is deterministic - same db_id always produces same pseudo-random ID
-    multiplier = 137
-    increment = 73
-    result = (db_id * multiplier + increment) % 100000
-    # Ensure it's always 5 digits
-    return str(result).zfill(5)
-
-
-def _reverse_pseudo_random_session_id(session_id_str: str) -> int:
-    """Reverse the pseudo-random transformation to get database ID."""
-    # Reverse the transformation to find the original database ID
-    try:
-        session_id = int(session_id_str)
-        multiplier = 137
-        increment = 73
-        
-        # We need to find db_id such that (db_id * multiplier + increment) % 100000 == session_id
-        # Since we're dealing with modulo 100000, we can try all possible values
-        for db_id in range(1, 10000):  # Reasonable range for session IDs
-            if (db_id * multiplier + increment) % 100000 == session_id:
-                return db_id
-        return int(session_id_str)  # Fallback to original if not found
-    except (ValueError, TypeError):
-        return 0
-
-
 def _hash_device_id(device_id: str) -> str:
     """Hash device ID for consistent identification."""
     return hashlib.sha256(device_id.encode()).hexdigest()
@@ -108,11 +79,11 @@ def _hash_device_id(device_id: str) -> str:
 
 def _generate_qr_code_base64(token: str, session_id: int) -> str:
     """Generate QR code as base64 encoded image with session information."""
-    # Use pseudo-random session ID instead of sequential database ID
-    session_display_id = _pseudo_random_session_id(session_id)
+    # Format session ID to 5 digits
+    formatted_session_id = str(session_id).zfill(5)
     
     # Embed session information in the QR code
-    qr_data = f"{session_display_id}:{token}"
+    qr_data = f"{formatted_session_id}:{token}"
     print(f"Generating QR code with data: {qr_data}")
     
     qr = qrcode.QRCode(
@@ -2215,8 +2186,8 @@ def qr_attendance_mark_view(request):
         return Response({"detail": "Only students can mark attendance."}, status=403)
     
     try:
-        # Convert pseudo-random session ID back to database ID
-        session_id_int = _reverse_pseudo_random_session_id(session_id)
+        # Convert session_id to integer for database lookup
+        session_id_int = int(session_id)
         session = QRAttendanceSession.objects.get(id=session_id_int)
     except (ValueError, TypeError, QRAttendanceSession.DoesNotExist):
         return Response({"detail": "Invalid session ID."}, status=404)

@@ -236,17 +236,9 @@ export const FacultyLayout: React.FC = () => {
     return Math.floor(10000 + Math.random() * 90000).toString();
   };
 
-  // Format session ID to 5 digits with pseudo-random transformation
+  // Format session ID to 5 digits
   const formatSessionId = (id: number) => {
-    // Use the same pseudo-random transformation as backend
-    const multiplier = 137;
-    const increment = 73;
-    let result = (id * multiplier + increment) % 100000;
-    // Handle negative results in JavaScript
-    if (result < 0) {
-      result += 100000;
-    }
-    return String(result).padStart(5, '0');
+    return String(id).padStart(5, '0');
   };
 
   /** Assigned subject ids/codes from API — only these subjects appear for this faculty */
