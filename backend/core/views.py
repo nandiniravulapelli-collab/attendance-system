@@ -2086,24 +2086,35 @@ def qr_attendance_sessions_view(request):
             print(f"Creating session - Faculty: {target_faculty.username}, Subject: {subject}")
             print(f"Start time: {start_time}, End time: {end_time}")
             
-            # Generate unique random session ID
-            custom_session_id = _generate_random_session_id()
-            while QRAttendanceSession.objects.filter(custom_session_id=custom_session_id).exists():
+            # Check if custom_session_id field exists in the model
+            custom_session_id = None
+            try:
+                # Generate unique random session ID
                 custom_session_id = _generate_random_session_id()
+                while QRAttendanceSession.objects.filter(custom_session_id=custom_session_id).exists():
+                    custom_session_id = _generate_random_session_id()
+            except Exception as e:
+                print(f"custom_session_id field may not exist in database yet: {e}")
+                custom_session_id = None
             
-            session = QRAttendanceSession.objects.create(
-                faculty=target_faculty,
-                subject=subject,
-                year='1',  # Default, not used
-                branch='CSM',  # Default, not used
-                branches='CSM',  # Default, not used
-                sections='A',  # Default, not used
-                duration_minutes=duration_minutes,
-                end_time=end_time,
-                current_qr_token=_generate_qr_token(),
-                token_expires_at=token_expires_at,
-                custom_session_id=custom_session_id
-            )
+            session_data = {
+                'faculty': target_faculty,
+                'subject': subject,
+                'year': '1',  # Default, not used
+                'branch': 'CSM',  # Default, not used
+                'branches': 'CSM',  # Default, not used
+                'sections': 'A',  # Default, not used
+                'duration_minutes': duration_minutes,
+                'end_time': end_time,
+                'current_qr_token': _generate_qr_token(),
+                'token_expires_at': token_expires_at,
+            }
+            
+            # Only add custom_session_id if the field exists
+            if custom_session_id is not None:
+                session_data['custom_session_id'] = custom_session_id
+            
+            session = QRAttendanceSession.objects.create(**session_data)
             print(f"Session created successfully: {session.id}, Custom ID: {custom_session_id}")
         except Exception as e:
             import traceback
@@ -2143,7 +2154,8 @@ def qr_attendance_session_detail_view(request, session_id):
         
         # Add QR code image
         try:
-            response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token, session.id, session.custom_session_id)
+            custom_id = getattr(session, 'custom_session_id', None)
+            response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token, session.id, custom_id)
         except Exception as e:
             response_data['qr_code_image'] = None
         
@@ -2197,15 +2209,15 @@ def qr_attendance_mark_view(request):
         return Response({"detail": "Only students can mark attendance."}, status=403)
     
     try:
-        # First try to find session by custom_session_id
-        session = QRAttendanceSession.objects.get(custom_session_id=session_id)
-    except QRAttendanceSession.DoesNotExist:
-        # Fall back to database ID lookup
+        # First try to find session by custom_session_id (if field exists)
         try:
+            session = QRAttendanceSession.objects.get(custom_session_id=session_id)
+        except:
+            # Fall back to database ID lookup
             session_id_int = int(session_id)
             session = QRAttendanceSession.objects.get(id=session_id_int)
-        except (ValueError, TypeError, QRAttendanceSession.DoesNotExist):
-            return Response({"detail": "Invalid session ID."}, status=404)
+    except (ValueError, TypeError, QRAttendanceSession.DoesNotExist):
+        return Response({"detail": "Invalid session ID."}, status=404)
     except QRAttendanceSession.DoesNotExist:
         return Response({"detail": "Invalid session."}, status=404)
     

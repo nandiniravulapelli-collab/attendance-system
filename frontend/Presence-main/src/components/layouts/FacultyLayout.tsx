@@ -187,6 +187,7 @@ export const FacultyLayout: React.FC = () => {
   const [displaySessionId, setDisplaySessionId] = useState<string>('');
   const [qrFullScreenOpen, setQrFullScreenOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [viewingQrRecords, setViewingQrRecords] = useState(false);
 
   // Toggle full screen mode
   const toggleFullScreen = () => {
@@ -1169,6 +1170,7 @@ export const FacultyLayout: React.FC = () => {
       if (res.ok) {
         const records = await res.json();
         setQrAttendanceRecords(records);
+        setViewingQrRecords(true);
       } else {
         toast({ title: 'Error', description: 'Failed to load records.', variant: 'destructive' });
       }
@@ -1856,9 +1858,19 @@ export const FacultyLayout: React.FC = () => {
                   <div className="space-y-6">
                     {/* Active Session Display */}
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => setActiveQrSession(null)}
+                        >
+                          ← Back to Sessions
+                        </Button>
+                        <h3 className="text-lg font-semibold">Active Session</h3>
+                        <div className="w-20"></div> {/* Spacer for centering */}
+                      </div>
                       <div className="flex flex-col md:flex-row gap-6">
                         <div className="flex-1">
-                          <h3 className="text-lg font-semibold mb-4">Active Session</h3>
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-muted-foreground">Session ID:</span>
@@ -2006,35 +2018,53 @@ export const FacultyLayout: React.FC = () => {
             </Card>
 
             {/* QR Attendance Records Dialog */}
-            {qrAttendanceRecords.length > 0 && (
+            {viewingQrRecords && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Attendance Records</CardTitle>
-                  <CardDescription>Students who marked attendance via QR</CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setViewingQrRecords(false)}
+                        className="mb-2"
+                      >
+                        ← Back to Session
+                      </Button>
+                      <CardTitle>Attendance Records</CardTitle>
+                      <CardDescription>Students who marked attendance via QR</CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-muted">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Roll Number</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Section</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Scanned At</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {qrAttendanceRecords.map((record) => (
-                          <tr key={record.id} className="border-t hover:bg-muted/50">
-                            <td className="px-4 py-2 text-sm">{record.student_name}</td>
-                            <td className="px-4 py-2 text-sm">{record.student_roll_number}</td>
-                            <td className="px-4 py-2 text-sm">{record.student_section}</td>
-                            <td className="px-4 py-2 text-sm">{new Date(record.scanned_at).toLocaleString()}</td>
+                  {qrAttendanceRecords.length > 0 ? (
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-muted">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium">Roll Number</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium">Section</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium">Scanned At</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {qrAttendanceRecords.map((record) => (
+                            <tr key={record.id} className="border-t hover:bg-muted/50">
+                              <td className="px-4 py-2 text-sm">{record.student_name}</td>
+                              <td className="px-4 py-2 text-sm">{record.student_roll_number}</td>
+                              <td className="px-4 py-2 text-sm">{record.student_section}</td>
+                              <td className="px-4 py-2 text-sm">{new Date(record.scanned_at).toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">No attendance records yet</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
