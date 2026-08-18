@@ -1091,27 +1091,17 @@ export const FacultyLayout: React.FC = () => {
 
   const handleActivateQrSession = async (sessionId: number) => {
     try {
-      console.log('Activating QR session with ID:', sessionId);
       const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`), {
         credentials: 'include'
       });
 
       if (res.ok) {
         const session = await res.json();
-        console.log('Session data received:', session);
         setActiveQrSession(session);
-        
-        if (session.qr_code_image) {
-          console.log('QR code image received, length:', session.qr_code_image.length);
-          setQrCodeImage(session.qr_code_image);
-        } else {
-          console.error('No QR code image in session data');
-        }
+        setQrCodeImage(session.qr_code_image);
         
         // Use formatted session ID (database ID formatted to 5 digits)
-        const displayId = formatSessionId(sessionId);
-        console.log('Display session ID:', displayId);
-        setDisplaySessionId(displayId);
+        setDisplaySessionId(formatSessionId(sessionId));
         
         // Start QR refresh interval
         if (qrRefreshInterval) {
@@ -1142,11 +1132,9 @@ export const FacultyLayout: React.FC = () => {
         
         setQrRefreshInterval(interval);
       } else {
-        console.error('Failed to load session, status:', res.status);
         toast({ title: 'Error', description: 'Failed to load session.', variant: 'destructive' });
       }
     } catch (error) {
-      console.error('Network error:', error);
       toast({ title: 'Error', description: 'Network error.', variant: 'destructive' });
     }
   };

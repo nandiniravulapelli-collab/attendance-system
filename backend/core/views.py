@@ -108,37 +108,31 @@ def _hash_device_id(device_id: str) -> str:
 
 def _generate_qr_code_base64(token: str, session_id: int) -> str:
     """Generate QR code as base64 encoded image with session information."""
-    try:
-        # Use pseudo-random session ID instead of sequential database ID
-        session_display_id = _pseudo_random_session_id(session_id)
-        
-        # Embed session information in the QR code
-        qr_data = f"{session_display_id}:{token}"
-        print(f"Generating QR code with data: {qr_data}")
-        
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
-        )
-        qr.add_data(qr_data)
-        qr.make(fit=True)
-        
-        img = qr.make_image(fill_color="black", back_color="white")
-        
-        # Convert to base64
-        buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
-        img_str = base64.b64encode(buffer.getvalue()).decode()
-        
-        print(f"QR code generated successfully for session {session_display_id}, length: {len(img_str)}")
-        return f"data:image/png;base64,{img_str}"
-    except Exception as e:
-        print(f"Error in _generate_qr_code_base64: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+    # Use pseudo-random session ID instead of sequential database ID
+    session_display_id = _pseudo_random_session_id(session_id)
+    
+    # Embed session information in the QR code
+    qr_data = f"{session_display_id}:{token}"
+    print(f"Generating QR code with data: {qr_data}")
+    
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(qr_data)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Convert to base64
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    img_str = base64.b64encode(buffer.getvalue()).decode()
+    
+    print(f"QR code generated successfully for session {formatted_session_id}")
+    return f"data:image/png;base64,{img_str}"
 
 
 @api_view(['GET', 'POST'])
@@ -2167,13 +2161,8 @@ def qr_attendance_session_detail_view(request, session_id):
         
         # Add QR code image
         try:
-            print(f"Generating QR code for session {session.id}, token: {session.current_qr_token}")
             response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token, session.id)
-            print(f"QR code generated successfully")
         except Exception as e:
-            print(f"Error generating QR code: {e}")
-            import traceback
-            traceback.print_exc()
             response_data['qr_code_image'] = None
         
         return Response(response_data)
