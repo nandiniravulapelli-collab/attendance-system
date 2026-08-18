@@ -201,7 +201,6 @@ class QRAttendanceSessionSerializer(serializers.ModelSerializer):
     is_expired = serializers.SerializerMethodField(read_only=True)
     branches = serializers.SerializerMethodField(read_only=True)
     duration_hours = serializers.SerializerMethodField(read_only=True)
-    custom_session_id = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = QRAttendanceSession
@@ -209,7 +208,7 @@ class QRAttendanceSessionSerializer(serializers.ModelSerializer):
             'id', 'faculty', 'faculty_name', 'subject', 'year', 'branch', 'branches', 'sections',
             'duration_minutes', 'duration_hours', 'start_time', 'end_time', 'is_active', 
             'current_qr_token', 'token_expires_at', 'token_refresh_interval',
-            'attendance_count', 'is_expired', 'custom_session_id'
+            'attendance_count', 'is_expired'
         )
         read_only_fields = ('id', 'faculty', 'start_time', 'current_qr_token', 'token_expires_at')
 
@@ -234,10 +233,6 @@ class QRAttendanceSessionSerializer(serializers.ModelSerializer):
     def get_duration_hours(self, obj):
         # Convert duration_minutes to hours
         return round(obj.duration_minutes / 60, 2)
-
-    def get_custom_session_id(self, obj):
-        # Return custom_session_id if it exists, otherwise return None
-        return getattr(obj, 'custom_session_id', None)
 
 
 class QRAttendanceRecordSerializer(serializers.ModelSerializer):
