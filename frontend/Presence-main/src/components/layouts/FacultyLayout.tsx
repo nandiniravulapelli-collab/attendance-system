@@ -230,12 +230,12 @@ export const FacultyLayout: React.FC = () => {
     };
   }, []);
 
-  // Generate random 5-digit session ID (not sequential)
-  const generateRandomSessionId = () => {
+  // Generate 5-digit random session ID
+  const generateFiveDigitId = () => {
     return Math.floor(10000 + Math.random() * 90000).toString();
   };
 
-  // Format session ID to 5 digits (fallback for regular sessions)
+  // Format session ID to 5 digits
   const formatSessionId = (id: number) => {
     return String(id).padStart(5, '0');
   };
@@ -1096,8 +1096,8 @@ export const FacultyLayout: React.FC = () => {
         setActiveQrSession(session);
         setQrCodeImage(session.qr_code_image);
         
-        // Use random session ID from backend if available, otherwise format the regular ID
-        setDisplaySessionId(session.random_session_id || formatSessionId(sessionId));
+        // Use formatted session ID
+        setDisplaySessionId(formatSessionId(sessionId));
         
         // Start QR refresh interval
         if (qrRefreshInterval) {

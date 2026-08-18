@@ -77,11 +77,13 @@ def _hash_device_id(device_id: str) -> str:
     return hashlib.sha256(device_id.encode()).hexdigest()
 
 
-def _generate_qr_code_base64(token: str, session_id: int, random_session_id: str = None) -> str:
+def _generate_qr_code_base64(token: str, session_id: int) -> str:
     """Generate QR code as base64 encoded image with session information."""
-    # Use random session ID for QR code (5-digit random number)
-    session_id_for_qr = random_session_id if random_session_id else str(session_id).zfill(5)
-    qr_data = f"{session_id_for_qr}:{token}"
+    # Format session ID to 5 digits
+    formatted_session_id = str(session_id).zfill(5)
+    
+    # Embed session information in the QR code
+    qr_data = f"{formatted_session_id}:{token}"
     print(f"Generating QR code with data: {qr_data}")
     
     qr = qrcode.QRCode(
@@ -100,7 +102,7 @@ def _generate_qr_code_base64(token: str, session_id: int, random_session_id: str
     img.save(buffer, format='PNG')
     img_str = base64.b64encode(buffer.getvalue()).decode()
     
-    print(f"QR code generated successfully for session {session_id_for_qr}")
+    print(f"QR code generated successfully for session {formatted_session_id}")
     return f"data:image/png;base64,{img_str}"
 
 
@@ -2075,23 +2077,9 @@ def qr_attendance_sessions_view(request):
         end_time = start_time + datetime.timedelta(minutes=duration_minutes)
         token_expires_at = start_time + datetime.timedelta(seconds=5)  # Initial token expires in 5 seconds
         
-        # Generate random 5-digit session ID
-        import random
-        random_session_id = None
-        max_attempts = 10
-        for attempt in range(max_attempts):
-            temp_id = str(random.randint(10000, 99999))
-            if not QRAttendanceSession.objects.filter(random_session_id=temp_id).exists():
-                random_session_id = temp_id
-                break
-        
-        if not random_session_id:
-            return Response({"detail": "Failed to generate unique session ID. Please try again."}, status=500)
-        
         try:
             print(f"Creating session - Faculty: {target_faculty.username}, Subject: {subject}")
             print(f"Start time: {start_time}, End time: {end_time}")
-            print(f"Random session ID: {random_session_id}")
             
             session = QRAttendanceSession.objects.create(
                 faculty=target_faculty,
@@ -2103,10 +2091,14 @@ def qr_attendance_sessions_view(request):
                 duration_minutes=duration_minutes,
                 end_time=end_time,
                 current_qr_token=_generate_qr_token(),
-                token_expires_at=token_expires_at,
-                random_session_id=random_session_id
+                token_expires_at=token_expires_at
             )
-            print(f"Session created successfully: {session.id}, Random ID: {random_session_id}")
+            print(f"Session created successfully: {session.id}")
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Error creating QR session: {error_details}")
+            return Response({"detail": f"Failed to create session: {str(e)}"}, status=500)
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
@@ -2145,7 +2137,7 @@ def qr_attendance_session_detail_view(request, session_id):
         
         # Add QR code image
         try:
-            response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token, session.id, session.random_session_id)
+            response_data['qr_code_image'] = _generate_qr_code_base64(session.current_qr_token, session.id)
         except Exception as e:
             response_data['qr_code_image'] = None
         
@@ -2258,24 +2250,21 @@ def qr_attendance_mark_view(request):
         date=today
     ).first()
     
-    # Calculate actual hours from session duration
-    session_hours = session.duration_minutes / 60
-    
     if existing_attendance:
-        # Update existing record - add session hours to current total
+        # Update existing record
         existing_attendance.status = 'present'
-        existing_attendance.hours = session_hours
-        existing_attendance.total_hours = existing_attendance.total_hours + session_hours
+        existing_attendance.hours = 1
+        existing_attendance.total_hours = 1
         existing_attendance.save()
     else:
-        # Create new record with actual session hours
+        # Create new record
         Attendance.objects.create(
             student=request.user,
             subject=session.subject,
             date=today,
             status='present',
-            hours=session_hours,
-            total_hours=session_hours
+            hours=1,
+            total_hours=1
         )
     
     serializer = QRAttendanceRecordSerializer(record)
