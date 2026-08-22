@@ -53,7 +53,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
-import { apiUrl, authFetch } from '@/lib/api';
+import { apiUrl } from '@/lib/api';
 import { downloadSampleExcel } from '@/lib/downloadSampleExcel';
 import { formatStudentSectionsDisplay, parseStudentSections, studentMatchesAnySection } from '@/lib/studentSections';
 import { aggregateAttendanceHoursByStudentSubject, ATTENDANCE_REPORT_CSV_HEADERS } from '@/lib/attendanceReportCsv';
@@ -299,7 +299,7 @@ export const AdminLayout: React.FC = () => {
     const fetchStudents = async () => {
       setStudentsLoading(true);
       try {
-        const res = await authFetch(apiUrl('/api/users/?role=student'));
+        const res = await fetch(apiUrl('/api/users/?role=student'), { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setApiStudents(Array.isArray(data) ? data : (data.results ?? []));
@@ -337,7 +337,7 @@ export const AdminLayout: React.FC = () => {
     const fetchDepartments = async () => {
       setDepartmentsLoading(true);
       try {
-        const res = await authFetch(apiUrl('/api/departments/'));
+        const res = await fetch(apiUrl('/api/departments/'), { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setApiDepartments(Array.isArray(data) ? data : []);
@@ -363,7 +363,7 @@ export const AdminLayout: React.FC = () => {
       return;
     }
     setSectionsLoading(true);
-    authFetch(apiUrl('/api/sections/'))
+    fetch(apiUrl('/api/sections/'), { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then((data: unknown) => setApiSections(Array.isArray(data) ? data : []))
       .catch(() => setApiSections([]))
@@ -373,7 +373,7 @@ export const AdminLayout: React.FC = () => {
   useEffect(() => {
     if (activeTab !== 'faculty' && activeTab !== 'dashboard') return;
     setFacultyLoading(true);
-    authFetch(apiUrl('/api/users/?role=faculty'))
+    fetch(apiUrl('/api/users/?role=faculty'), { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then((data: unknown) => setApiFaculty(Array.isArray(data) ? data : []))
       .catch(() => setApiFaculty([]))
@@ -401,7 +401,7 @@ export const AdminLayout: React.FC = () => {
           if (subjectFilterSemester && subjectFilterSemester !== '__all__') params.set('semester', subjectFilterSemester);
           if (params.toString()) url = apiUrl(`/api/subjects/?${params.toString()}`);
         }
-        const res = await authFetch(url);
+        const res = await fetch(url, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setApiSubjects(Array.isArray(data) ? data : []);
@@ -438,6 +438,8 @@ export const AdminLayout: React.FC = () => {
     try {
       const res = await fetch(apiUrl(`/api/users/${studentEditId}/`), {
         method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(body)
       });
       if (res.ok) {
