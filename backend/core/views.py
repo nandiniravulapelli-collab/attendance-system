@@ -2,6 +2,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import login
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse, JsonResponse
@@ -270,17 +271,23 @@ def register(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
-
+    print(f"Login attempt - User: {request.data.get('username')}, Status: Request received")
+    
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.validated_data['user']
         login(request, user)
+        
+        print(f"Login success - User: {user.username}, Auth class: JWT + Session, Authenticated: True")
 
         role = user.role
         if user.is_superuser and request.data.get("role") == "admin":
             role = "admin"
 
-        return Response({
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        response_data = {
             "message": "Login successful",
             "id": user.id,
             "email": user.email,
@@ -288,15 +295,23 @@ def login_view(request):
             "username": user.username,
             "full_name": user.full_name or user.username,
             "department": user.department or "",
-            "faculty_department_sections": _get_faculty_department_sections(user) if role == 'faculty' else []
-        })
+            "faculty_department_sections": _get_faculty_department_sections(user) if role == 'faculty' else [],
+            "access": str(refresh.access_token),
+            "refresh": str(refresh)
+        }
+        
+        print(f"Login response status: 200, Tokens generated")
+        return Response(response_data, status=200)
 
+    print(f"Login failed - Validation errors: {serializer.errors}")
     return Response(serializer.errors, status=400)
 
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def attendance_view(request):
+    print(f"Attendance API - Method: {request.method}, User: {request.user.username if request.user.is_authenticated else 'Anonymous'}, Authenticated: {request.user.is_authenticated}")
+    
     ctrl = _get_attendance_portal_control()
     if request.user.role == 'student' and ctrl.freeze_student_portal:
         return Response({"detail": "Attendance portal is currently frozen for students."}, status=423)

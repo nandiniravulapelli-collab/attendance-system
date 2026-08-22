@@ -10,6 +10,8 @@ interface User {
   rollNumber?: string;
   subjects?: string[];
   faculty_department_sections?: Array<{ department_code: string; section_name: string }>;
+  accessToken?: string;
+  refreshToken?: string;
 }
 
 interface AuthContextType {
@@ -50,13 +52,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsLoading(false);
   }, []);
 
-  // 🔥 LOGIN CONNECTED TO DJANGO (FIXED)
+  // 🔥 LOGIN CONNECTED TO DJANGO WITH JWT TOKENS
 const login = async (
   email: string,
   password: string,
   role: "admin" | "faculty" | "student"
 ): Promise<{ success: true } | { success: false; error: string }> => {
   try {
+    console.log("Login attempt started");
     const response = await fetch(apiUrl("/api/login/"), {
       method: "POST",
       headers: {
@@ -71,9 +74,11 @@ const login = async (
     });
 
     const data = await response.json().catch(() => ({}));
+    console.log("Login response status:", response.status);
 
     if (!response.ok) {
       const message = getFirstError(data);
+      console.error("Login failed:", message);
       return { success: false, error: message };
     }
 
@@ -85,8 +90,11 @@ const login = async (
       departmentId: data.department ?? "",
       rollNumber: data.username,
       faculty_department_sections: data.faculty_department_sections || [],
+      accessToken: data.access,
+      refreshToken: data.refresh,
     };
 
+    console.log("Login successful, storing tokens");
     setUser(loggedUser);
     localStorage.setItem("attendanceUser", JSON.stringify(loggedUser));
 

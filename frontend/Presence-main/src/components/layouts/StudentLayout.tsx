@@ -44,7 +44,7 @@ import {
 import { Html5Qrcode } from 'html5-qrcode';
 import { db } from '@/lib/mockDb';
 import { toast } from '@/hooks/use-toast';
-import { apiUrl } from '@/lib/api';
+import { apiUrl, authFetch } from '@/lib/api';
 import { formatStudentSectionsDisplay, parseStudentSections } from '@/lib/studentSections';
 import { format, parseISO } from 'date-fns';
 
@@ -93,7 +93,7 @@ export const StudentLayout: React.FC = () => {
     if (numericId == null || (activeTab !== 'profile' && activeTab !== 'dashboard')) return;
     const fetchProfile = async () => {
       try {
-        const res = await fetch(apiUrl(`/api/users/${numericId}/`), { credentials: 'include' });
+        const res = await authFetch(apiUrl(`/api/users/${numericId}/`));
         if (res.ok) setApiProfile(await res.json());
       } catch {
         setApiProfile(null);
@@ -103,13 +103,13 @@ export const StudentLayout: React.FC = () => {
   }, [numericId, activeTab]);
 
   const fetchDepartments = () => {
-    fetch(apiUrl('/api/departments/'), { credentials: 'include' })
+    authFetch(apiUrl('/api/departments/'))
       .then(res => res.ok ? res.json() : [])
       .then((data: unknown) => setApiDepartments(Array.isArray(data) ? data : []))
       .catch(() => setApiDepartments([]));
   };
   const fetchSections = () => {
-    fetch(apiUrl('/api/sections/'), { credentials: 'include' })
+    authFetch(apiUrl('/api/sections/'))
       .then(res => res.ok ? res.json() : [])
       .then((data: unknown) => setApiSections(Array.isArray(data) ? data : []))
       .catch(() => setApiSections([]));
@@ -126,7 +126,7 @@ export const StudentLayout: React.FC = () => {
     let profile = apiProfile;
     if (numericId != null && !profile) {
       try {
-        const res = await fetch(apiUrl(`/api/users/${numericId}/`), { credentials: 'include' });
+        const res = await authFetch(apiUrl(`/api/users/${numericId}/`));
         if (res.ok) {
           profile = await res.json();
           setApiProfile(profile);
@@ -153,10 +153,8 @@ export const StudentLayout: React.FC = () => {
   const handleSaveEditProfile = async () => {
     if (numericId == null) return;
     try {
-      const res = await fetch(apiUrl(`/api/users/${numericId}/`), {
+      const res = await authFetch(apiUrl(`/api/users/${numericId}/`), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           full_name: profileEditForm.full_name,
           roll_number: profileEditForm.roll_number,
@@ -195,10 +193,8 @@ export const StudentLayout: React.FC = () => {
       return;
     }
     try {
-      const res = await fetch(apiUrl(`/api/users/${numericId}/`), {
+      const res = await authFetch(apiUrl(`/api/users/${numericId}/`), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           current_password: changePasswordForm.current_password,
           new_password: changePasswordForm.new_password
@@ -237,7 +233,7 @@ export const StudentLayout: React.FC = () => {
   const [dashboardSubjectFilters, setDashboardSubjectFilters] = useState<string[]>([]);
   const [isStudentAttendanceFrozen, setIsStudentAttendanceFrozen] = useState(false);
   useEffect(() => {
-    fetch(apiUrl('/api/attendance-portal-freeze/'), { credentials: 'include' })
+    authFetch(apiUrl('/api/attendance-portal-freeze/'))
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => setIsStudentAttendanceFrozen(Boolean(data?.freeze_student_portal)))
       .catch(() => setIsStudentAttendanceFrozen(false));
@@ -259,7 +255,7 @@ export const StudentLayout: React.FC = () => {
     if (fromDate) params.set('from_date', format(fromDate, 'yyyy-MM-dd'));
     if (toDate) params.set('to_date', format(toDate, 'yyyy-MM-dd'));
     const url = params.toString() ? apiUrl(`/api/attendance/?${params.toString()}`) : apiUrl('/api/attendance/');
-    fetch(url, { credentials: 'include' })
+    authFetch(url)
       .then(res => res.ok ? res.json() : null)
       .then(data => setApiAttendance(data))
       .catch(() => setApiAttendance(null));
@@ -462,13 +458,8 @@ export const StudentLayout: React.FC = () => {
       };
       console.log('Request payload:', payload);
 
-      const res = await fetch(apiEndpoint, {
+      const res = await authFetch(apiEndpoint, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include',
         body: JSON.stringify(payload)
       });
 

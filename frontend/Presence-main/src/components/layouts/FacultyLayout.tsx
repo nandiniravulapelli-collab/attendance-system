@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiUrl } from '@/lib/api';
+import { apiUrl, authFetch } from '@/lib/api';
 import { downloadSampleExcel } from '@/lib/downloadSampleExcel';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -395,7 +395,7 @@ export const FacultyLayout: React.FC = () => {
   }, [facultyDeptCodes.length, selectedBranches.length]);
 
   useEffect(() => {
-    fetch(apiUrl('/api/attendance-portal-freeze/'), { credentials: 'include' })
+    authFetch(apiUrl('/api/attendance-portal-freeze/'))
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => setIsFacultyAttendanceFrozen(Boolean(data?.freeze_faculty_portal) && user?.role === 'faculty'))
       .catch(() => setIsFacultyAttendanceFrozen(false));
@@ -435,7 +435,7 @@ export const FacultyLayout: React.FC = () => {
       setAttendanceRecords([]);
       return;
     }
-    fetch(apiUrl('/api/attendance/'), { credentials: 'include' })
+    authFetch(apiUrl('/api/attendance/'))
       .then(res => res.ok ? res.json() : { records: [] })
       .then((data: { records?: Array<{ student: number; subject: string; date: string; status: string; hours?: number | null; total_hours?: number | null }> }) => setAttendanceRecords(data?.records ?? []))
       .catch(() => setAttendanceRecords([]));
@@ -535,10 +535,8 @@ export const FacultyLayout: React.FC = () => {
       })
     );
     try {
-      const res = await fetch(apiUrl('/api/attendance/'), {
+      const res = await authFetch(apiUrl('/api/attendance/'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
@@ -547,7 +545,7 @@ export const FacultyLayout: React.FC = () => {
         toast({ title: 'Failed to save', description: String(msg), variant: 'destructive' });
         return;
       }
-      fetch(apiUrl('/api/attendance/'), { credentials: 'include' })
+      authFetch(apiUrl('/api/attendance/'))
         .then(r => r.ok ? r.json() : { records: [] })
         .then((d: { records?: Array<{ student: number; subject: string; date: string; status: string; hours?: number | null; total_hours?: number | null }> }) => setAttendanceRecords(d?.records ?? []))
         .catch(() => {});
@@ -754,7 +752,7 @@ export const FacultyLayout: React.FC = () => {
         variant: created === 0 && updated === 0 && totalSkipped > 0 ? 'destructive' : 'default',
       });
 
-      fetch(apiUrl('/api/attendance/'), { credentials: 'include' })
+      authFetch(apiUrl('/api/attendance/'))
         .then(r => (r.ok ? r.json() : { records: [] }))
         .then((d: { records?: Array<{ student: number; subject: string; date: string; status: string }> }) =>
           setAttendanceRecords(d?.records ?? []),
@@ -961,8 +959,8 @@ export const FacultyLayout: React.FC = () => {
     const loadDefaulters = async () => {
       try {
         const [studentsRes, attRes] = await Promise.all([
-          fetch(apiUrl('/api/users/?role=student'), { credentials: 'include' }),
-          fetch(apiUrl('/api/attendance/'), { credentials: 'include' }),
+          authFetch(apiUrl('/api/users/?role=student')),
+          authFetch(apiUrl('/api/attendance/')),
         ]);
         
         const studentsList = studentsRes.ok ? await studentsRes.json() : [];
@@ -1046,10 +1044,8 @@ export const FacultyLayout: React.FC = () => {
       
       console.log('Starting QR session with payload:', payload);
       
-      const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
+      const res = await authFetch(apiUrl('/api/qr-attendance/sessions/'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(payload)
       });
 
@@ -1083,9 +1079,7 @@ export const FacultyLayout: React.FC = () => {
 
   const handleActivateQrSession = async (sessionId: number) => {
     try {
-      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`), {
-        credentials: 'include'
-      });
+      const res = await authFetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`));
 
       if (res.ok) {
         const session = await res.json();
@@ -1102,9 +1096,7 @@ export const FacultyLayout: React.FC = () => {
         
         const interval = setInterval(async () => {
           try {
-            const refreshRes = await fetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`), {
-              credentials: 'include'
-            });
+            const refreshRes = await authFetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`));
             if (refreshRes.ok) {
               const refreshedSession = await refreshRes.json();
               if (refreshedSession.qr_code_image) {
@@ -1135,10 +1127,8 @@ export const FacultyLayout: React.FC = () => {
     if (!activeQrSession) return;
 
     try {
-      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${activeQrSession.id}/`), {
+      const res = await authFetch(apiUrl(`/api/qr-attendance/sessions/${activeQrSession.id}/`), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ is_active: false })
       });
 
@@ -1163,9 +1153,7 @@ export const FacultyLayout: React.FC = () => {
     if (!activeQrSession) return;
 
     try {
-      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${activeQrSession.id}/records/`), {
-        credentials: 'include'
-      });
+      const res = await authFetch(apiUrl(`/api/qr-attendance/sessions/${activeQrSession.id}/records/`));
 
       if (res.ok) {
         const records = await res.json();
@@ -1185,9 +1173,8 @@ export const FacultyLayout: React.FC = () => {
     }
 
     try {
-      const res = await fetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`), {
+      const res = await authFetch(apiUrl(`/api/qr-attendance/sessions/${sessionId}/`), {
         method: 'DELETE',
-        credentials: 'include'
       });
 
       if (res.ok) {
@@ -1212,9 +1199,7 @@ export const FacultyLayout: React.FC = () => {
 
   const loadQrSessions = async () => {
     try {
-      const res = await fetch(apiUrl('/api/qr-attendance/sessions/'), {
-        credentials: 'include'
-      });
+      const res = await authFetch(apiUrl('/api/qr-attendance/sessions/'));
 
       if (res.ok) {
         const sessions = await res.json();

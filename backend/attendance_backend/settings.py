@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
     'core',
 ]
@@ -52,6 +53,7 @@ MIDDLEWARE = [
 # For college deployment: set CORS_ALLOWED_ORIGINS to your frontend URL(s), comma-separated.
 _default_cors_origins = [
     "https://attendance-system-2-77c2.onrender.com",
+    "https://attendance-system-1-kbyb.onrender.com",
 ]
 _cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
 _cors_from_env = [o.strip() for o in _cors_env.split(",") if o.strip()]
@@ -96,8 +98,25 @@ SESSION_SAVE_EVERY_REQUEST = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'core.auth.SessionAuthenticationNoCSRF',
         'rest_framework.authentication.BasicAuthentication',
     ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+# JWT Settings
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
 }
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
