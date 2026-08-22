@@ -10,9 +10,9 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='qrattendancesession',
-            name='branches',
-            field=models.CharField(blank=True, default='', help_text='Comma-separated branch codes', max_length=500),
+        # This field already exists in the database, marking as no-op
+        migrations.RunSQL(
+            sql="SELECT 1",  # No-op SQL
+            reverse_sql="SELECT 1",  # No-op SQL
         ),
     ]
